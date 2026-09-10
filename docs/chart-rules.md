@@ -3,12 +3,15 @@
 The current policy is [Dashboard chart standard](dashboard-chart-standard.md).
 It defines fixed time intervals, weighted averages, unsmoothed translucent ranges,
 gap-aware hover details, and frozen detail views for every Dashboard card.
+Explorer uses the same renderer with a shared cursor and inspector; its
+data-specific limits are in the [Explorer guide](explorer-design.md).
 It also records the remaining app-wide rollout work.
 
 The notes below describe the earlier 5 September 2026 implementation. Other
-tabs still use that renderer. Its pixel-based ranges, trailing average, and
+tabs outside Dashboard and Explorer still use that renderer. Its pixel-based
+ranges, trailing average, and
 mean-as-minimum fallback are **not** the target for new charts. In particular,
-the old audit below no longer describes the Dashboard.
+the old audit below no longer describes Dashboard or Explorer.
 
 ## Previous policy (superseded)
 

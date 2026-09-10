@@ -66,11 +66,11 @@ final class LeakDetectorTests: XCTestCase {
 
     func testFindsARisingBaselineThroughCyclicReleases() {
         let mib: UInt64 = 1024 * 1024
-        let series = (0...60).map { minute in
-            (
-                start.addingTimeInterval(Double(minute) * 60),
-                1024 * mib + UInt64(minute) * 2 * mib + UInt64(minute % 10) * 50 * mib
-            )
+        let series: [(Date, UInt64)] = (0...60).map { minute in
+            let date = start.addingTimeInterval(Double(minute) * 60)
+            let baseline = (1024 + UInt64(minute) * 2) * mib
+            let cycle = UInt64(minute % 10) * 50 * mib
+            return (date, baseline + cycle)
         }
         XCTAssertNotNil(LeakDetector.analyze(series: series))
     }

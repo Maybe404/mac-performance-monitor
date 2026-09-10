@@ -1,6 +1,6 @@
 # Mac Performance Monitor
 
-[![2.0 CI](https://img.shields.io/github/actions/workflow/status/Zesty0wl/mac-performance-monitor/ci.yml?branch=2.0.0&label=2.0%20CI&logo=githubactions&logoColor=white)](https://github.com/Zesty0wl/mac-performance-monitor/actions/workflows/ci.yml?query=branch%3A2.0.0)
+[![CI](https://img.shields.io/github/actions/workflow/status/Zesty0wl/mac-performance-monitor/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/Zesty0wl/mac-performance-monitor/actions/workflows/ci.yml?query=branch%3Amain)
 [![Latest release](https://img.shields.io/github/v/release/Zesty0wl/mac-performance-monitor?logo=github&label=release)](https://github.com/Zesty0wl/mac-performance-monitor/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Zesty0wl/mac-performance-monitor/MacPerformanceMonitor.pkg?logo=github&label=downloads)](https://github.com/Zesty0wl/mac-performance-monitor/releases)
 [![Homebrew cask](https://img.shields.io/homebrew/cask/v/mac-performance-monitor?logo=homebrew&logoColor=white&label=homebrew)](https://formulae.brew.sh/cask/mac-performance-monitor)
@@ -23,9 +23,8 @@ open when needed. The menu bar and history recorder have separate switches.
 
 Free and open source. No usage telemetry. Recorded samples stay on your Mac.
 
-> **2.0 development branch:** this README describes the upcoming 2.0 release.
-> Downloads and Homebrew install the latest published release. To try this
-> branch, [build 2.0 from source](#build-20-from-source).
+[2.0 release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) ·
+[Documentation](docs/README.md)
 
 [![Explorer showing linked machine and process charts with a value inspector](docs/images/explorer.png)](docs/images/explorer.png)
 
@@ -63,6 +62,17 @@ ordinary alert for an hour, or open it in Explorer at the relevant time.
 Related memory alerts share a notice, and only critical notices request sound.
 
 [Adaptive alert rules and limits](docs/adaptive-alerts.md)
+
+### Upgrading From 1.x
+
+Existing alert choices and history carry forward. The old swap threshold is
+no longer used, but explicit process-memory budgets remain available. Alert
+state is local and separate from full history recording. New database fields
+preserve detail from new samples; they cannot restore missing older readings.
+
+Back up the app's data before testing a downgrade. Review the
+[upgrade notes](CHANGELOG.md#upgrade-notes) and [privacy policy](SECURITY.md)
+before sharing trace files, reports, or screenshots.
 
 ### Clearer Charts And Details
 
@@ -160,8 +170,9 @@ Memory growth, pressure events, and the heaviest consumers.
 ## Install
 
 For the latest published build, download `MacPerformanceMonitor.pkg` from
-[Releases](../../releases) and double-click it. Published packages are Developer
-ID signed and notarized by Apple. Sparkle handles app updates.
+[Releases](https://github.com/Zesty0wl/mac-performance-monitor/releases/latest)
+and double-click it. Published packages are Developer ID signed and notarized
+by Apple. Sparkle handles app updates.
 
 ### Homebrew
 
@@ -171,13 +182,14 @@ brew install --cask mac-performance-monitor
 
 This installs the same signed, notarized pkg from the main
 [homebrew-cask](https://github.com/Homebrew/homebrew-cask) repository. Homebrew's
-bot picks up new releases. The app also keeps itself current through Sparkle.
+version can lag a new release until its cask update lands. The app also keeps
+itself current through Sparkle.
 To include it in `brew upgrade`, pass `--greedy`.
 
-### Build 2.0 From Source
+### Build From Source
 
 ```sh
-git clone --branch 2.0.0 https://github.com/Zesty0wl/mac-performance-monitor.git
+git clone --branch main https://github.com/Zesty0wl/mac-performance-monitor.git
 cd mac-performance-monitor
 swift build
 swift test
@@ -185,7 +197,10 @@ Scripts/run.sh
 ```
 
 You need Apple silicon, macOS 15 (Sequoia) or later, and a Swift 6 toolchain
-from Xcode 16 or Swift.org.
+from Xcode 16 or Swift.org. Bundling also needs Xcode's `xcstringstool`.
+The run script uses a signing identity when available, or falls back to ad-hoc
+signing. Ad-hoc builds cannot use the privileged helper. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for signing options and test coverage.
 
 ## Privacy
 
@@ -203,7 +218,8 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [SECURITY.md](SECURITY.md).
 
 The app ships in English, Simplified Chinese, German, and French. German and
-French began as AI translations and await review by native speakers.
+French began as AI translations and await review by native speakers. New 2.0
+strings in Simplified Chinese also include generated copy awaiting review.
 Translate or review in your browser on
 [Crowdin](https://crowdin.com/project/mac-performance-monitor), or edit one file and open a
 pull request. See [TRANSLATING.md](TRANSLATING.md) for the translation history

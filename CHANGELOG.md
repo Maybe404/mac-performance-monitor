@@ -6,6 +6,10 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-10
+
+See the [release notes](RELEASE_NOTES.md) for the short overview.
+
 ### Changed
 
 - **Alerts now track growth and worsening conditions.** Stable swap usage no
@@ -23,7 +27,8 @@ Notable changes to Mac Performance Monitor. This project follows
   Pin an instant, jump to an exact time, compare up to eight running or exited
   processes, and inspect recorded values, source intervals, and the full machine
   row. Choose charts from searchable groups, switch between a grid and a list,
-  or focus one chart. CSV exports the visible data; process trace import/export
+  or focus one chart. Command-scroll zooms around the pointer across all charts;
+  ordinary scrolling still moves the page. CSV exports the visible data; process trace import/export
   and the previous process monitor remain available. Current hardware inventory
   is separate from historical evidence. See the [Explorer guide](docs/explorer-design.md).
 - **The app comes first now, and the menu bar item is optional.** Requested in
@@ -58,11 +63,18 @@ Notable changes to Mac Performance Monitor. This project follows
   peaks. Older missing bounds remain unknown, and thermal averages with
   unknown counts are marked approximate. The standard and app-wide rollout
   guide are in [Dashboard chart standard](docs/dashboard-chart-standard.md).
-- Tabs other than Dashboard and Explorer share the existing line-and-band renderer and load every stored
-  row instead of thinning history before drawing. Stored ranges include
+- Tabs other than Dashboard and Explorer share the existing line-and-band
+  renderer and load every stored row instead of thinning history before drawing.
+  Stored ranges include
   recent finer-resolution rows up to the present. The Processes load card
   shows the recorded 1, 5, and 15 minute load averages together, including in
   its enlarged detail chart.
+- Per-core bars show current measured usage, hardware overview panels use the
+  available width, and the process table appears promptly when a window opens.
+- The compiler-driven string-coverage check now fails when the interface uses
+  a key that the catalog does not carry. CI runs it alongside the source-text
+  check and Apple's catalog compiler. A documented allowlist covers strings
+  that are the same in every language, such as units and identifiers.
 
 ### Security
 
@@ -107,6 +119,10 @@ Notable changes to Mac Performance Monitor. This project follows
   has fixed read/write columns, with throughput and service time on separate
   rows. Idle readings keep their space, and warning icons show error and retry
   counts on hover without changing the layout.
+- A cyclic-growth test fixture now uses smaller typed expressions to reduce
+  compiler work after a hosted CI type-checking timeout.
+- The French Explorer capacity warning now describes reaching the comparison
+  limit, not a completed Explorer.
 - Fixed a crash during background history maintenance. Process-cache pruning,
   clearing, and lookups now share the database writer queue with sample inserts.
   Cleanup after a failed transaction also finishes on that queue before another
@@ -119,15 +135,10 @@ Notable changes to Mac Performance Monitor. This project follows
   remain missing; they are not replaced with zero or CPU temperature.
   Dashboard thermal charts keep these gaps visible and distinguish missing
   readings from older records whose full range was never stored.
-- **Alerts could be silent.** Alert evaluation runs inside the per-process scan,
-  and that scan only ran while recording was on, a window was open, or a menu
-  bar panel was up. With recording paused and nothing on screen, no alert was
-  ever evaluated, critical memory pressure included: a kernel pressure event
-  forced a tick, but the tick returned before evaluating anything. Alerts are
-  now a reason to sample in their own right. The pressure, swap, thermal, CPU
-  and GPU alerts are evaluated from the cheap system tick, and the two that need
-  the process list, the per-process ceiling and the runaway-process alert, run a
-  scan once a minute when nothing else calls for one.
+- Alerts no longer depend on a visible window or full history recording.
+  System alerts use fresh system samples independently of the display refresh
+  setting. Process alerts request a scan at least once a minute when nothing
+  else needs one, and enabled GPU alerts keep GPU sampling active.
 - With no menu bar item, no window and no panel open, the sampler no longer
   publishes to the main thread every second for nobody to read.
 - A chart resuming after a gap no longer climbs vertically from zero. The
@@ -136,10 +147,9 @@ Notable changes to Mac Performance Monitor. This project follows
   both recorded and drawn: every restart left a zero at the start of the run.
   The first tick still seeds the sampler and drives the first process scan, but
   it is neither recorded nor charted.
-- The six hour, day and week ranges drew dots instead of a line. The gap
-  threshold was sized to the logging interval, but those ranges are served by
-  rows a minute or an hour apart, so every row counted as an island. The
-  threshold now follows the spacing of whichever tier the range loaded from.
+- Long-range charts no longer mistake each stored aggregate for an isolated
+  point. Source intervals describe the time those rows cover; finer live data
+  still uses its own cadence when detecting gaps.
 - Gaps in the recently drawn line, and straight lines across periods when the
   app was not running: samples kept arriving while the window was covered but
   were dropped, and the gap threshold grew with the range (two and a half
@@ -165,13 +175,23 @@ Notable changes to Mac Performance Monitor. This project follows
   an otherwise translated screen. Fourteen further escaped keys duplicated
   entries that were already correct and have been removed.
 
-### Changed
+### Upgrade Notes
 
-- `Scripts/check-string-coverage.py` now fails when the compiler emits an
-  interface string the catalog does not carry, and runs in CI, so a new string
-  cannot ship untranslated. Keys that read the same in every language, such as
-  separators, units and text field placeholder samples, sit in a documented
-  allowlist in that script.
+- Existing alert on/off choices and explicit process-memory budgets remain
+  intact. The old fixed swap ceiling no longer controls alerts; swap now uses
+  growth and paging evidence. Quiet Evaluation can observe growth without
+  sending growth notifications.
+- Existing history stays available. New database fields preserve chart bounds,
+  sample counts, and paging evidence from new readings; they cannot restore
+  detail that older versions did not record. Back up the app's data before
+  testing a downgrade.
+- A small local incident checkpoint and delivery log are separate from full
+  performance-history recording. They let alerts retain notification state
+  across restarts, even when full history is off.
+- The menu bar, history recorder, and Dock icon now have separate controls.
+  Existing mode settings carry forward to the new switches.
+- Existing process trace files remain supported. Current hardware inventory is
+  still an on-demand snapshot, not a historical inventory.
 
 ## [1.7.1] - 2026-09-03
 
@@ -856,7 +876,8 @@ processes behind them.
 - A clean split between a headless, unit-tested data layer and the SwiftUI app. CI
   builds, tests, and lints on every push and pull request.
 
-[Unreleased]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.5.0.198...HEAD
+[Unreleased]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v2.0.0.231...HEAD
+[2.0.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.7.1.206...v2.0.0.231
 [1.7.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.6.0.204...v1.7.0.205
 [1.6.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.5.0.198...v1.6.0.204
 [1.5.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.4.0.197...v1.5.0.198

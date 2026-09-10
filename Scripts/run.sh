@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# run.sh — the dev inner loop: build, bundle, sign, and launch.
+# run.sh - the dev inner loop: build, bundle, sign, and launch.
 #
-# Debug by default for fast iteration; pass --release to match the shipping
-# build.
+# Debug by default for fast iteration; --release uses release optimization,
+# but does not notarize or install a shipping build.
 #
 # Signing modes:
-#   (default)        Ad-hoc (codesign -s -). Launches locally with no cert, but
+#   (default)        Use a keychain identity when available, otherwise ad-hoc.
+#   --adhoc          Ad-hoc (codesign -s -). Launches locally with no cert, but
 #                    the ad-hoc signature has no certificate chain, so it cannot
 #                    satisfy the app<->helper XPC code-signing pin
 #                    (HelperConstants.peerRequirement, which requires
@@ -70,7 +71,7 @@ if [[ "$SIGN_MODE" == "auto" ]]; then
     SIGN_MODE="identity"
   else
     SIGN_MODE="adhoc"
-    echo "run.sh: no codesigning identity found — falling back to ad-hoc." >&2
+    echo "run.sh: no codesigning identity found; falling back to ad-hoc." >&2
     echo "        (Helper coverage will not work and perf is unrepresentative.)" >&2
   fi
 fi
@@ -187,5 +188,4 @@ fi
 echo "==> Launching"
 open "$APP"
 echo "Launched $APP"
-echo "Note: this is a menu bar app (no window, no Dock icon by default);"
-echo "look for its read-out near the clock at the right end of the menu bar."
+echo "Opening the app window. Menu bar, Dock, and history options are in Settings."

@@ -1027,7 +1027,7 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "needs_review", "value" : "Explorer voll" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Explorer Full" } },
-        "fr" : { "stringUnit" : { "state" : "needs_review", "value" : "Explorateur complet" } },
+        "fr" : { "stringUnit" : { "state" : "needs_review", "value" : "Limite de comparaison atteinte" } },
         "zh-Hans" : { "stringUnit" : { "state" : "needs_review", "value" : "数据探索已满" } }
       }
     },
