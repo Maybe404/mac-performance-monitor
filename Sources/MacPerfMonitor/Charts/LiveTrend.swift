@@ -14,20 +14,33 @@ struct LiveColumn {
     /// bucket maximum beside them (`SystemHistoryWindow.Column` peak columns).
     /// The band rises to these; the line ignores them.
     var highs: ArraySlice<Double>?
+    var lows: ArraySlice<Double>?
+    var weights: ArraySlice<Double>?
+    var durations: ArraySlice<Double>?
 
-    init(times: ArraySlice<Double>, values: ArraySlice<Double>, highs: ArraySlice<Double>? = nil) {
+    init(
+        times: ArraySlice<Double>, values: ArraySlice<Double>, highs: ArraySlice<Double>? = nil,
+        lows: ArraySlice<Double>? = nil, weights: ArraySlice<Double>? = nil,
+        durations: ArraySlice<Double>? = nil
+    ) {
         self.times = times
         self.values = values
         self.highs = highs
+        self.lows = lows
+        self.weights = weights
+        self.durations = durations
     }
 
     init(
         _ window: SystemHistoryWindow, _ column: SystemHistoryWindow.Column,
-        peak: SystemHistoryWindow.Column? = nil
+        peak: SystemHistoryWindow.Column? = nil, minimum: SystemHistoryWindow.Column? = nil
     ) {
         times = window.timestamps
         values = window.values(column)
         highs = peak.map { window.values($0) }
+        lows = minimum.map { window.values($0) }
+        weights = window.values(.sampleCount)
+        durations = window.values(.bucketDuration)
     }
 
     /// `high`, when given, reads each point's stored peak (see
@@ -77,13 +90,22 @@ struct LiveColumn {
 
     /// The smallest and largest value, without allocating.
     var range: (min: Double, max: Double)? {
-        guard var lo = values.first else { return nil }
+        guard var lo = values.first(where: \.isFinite) else { return nil }
         var hi = lo
-        for v in values {
+        for v in values where v.isFinite {
             if v < lo { lo = v }
             if v > hi { hi = v }
         }
         return (lo, hi)
+    }
+
+    func statistics(
+        width: Double, range: ClosedRange<Double>, gapThreshold: Double, scale: Double = 1
+    ) -> [ChartStatistics.Bucket] {
+        ChartStatistics.buckets(
+            times: times, values: values, lows: lows, highs: highs,
+            weights: weights, durations: durations, width: width,
+            range: range, gapThreshold: gapThreshold, scale: scale)
     }
 }
 

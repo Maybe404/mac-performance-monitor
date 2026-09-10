@@ -239,6 +239,7 @@ struct BatteryView: View {
                 value: BatteryFormat.watts(battery.powerWatts),
                 tint: .yellow,
                 samples: samples { $0.batteryPowerWatts },
+                unit: .watts,
                 detail: battery.isCharging ? t("in") : t("out")),
             MetricCardData(
                 label: t("Health"),
@@ -283,7 +284,8 @@ struct BatteryView: View {
                     label: t("Temperature"),
                     value: BatteryFormat.celsius(temp),
                     tint: .teal,
-                    samples: samples { $0.batteryTemperatureCelsius }))
+                    samples: samples { $0.batteryTemperatureCelsius },
+                    unit: .celsius))
         }
         return cards
     }

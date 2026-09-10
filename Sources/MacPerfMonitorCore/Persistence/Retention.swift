@@ -295,7 +295,13 @@ public enum Retention {
 
         try db.execute(
             sql: """
-                INSERT INTO system_minute (bucket, pressure_avg, pressure_max, app_avg, wired_avg, compressed_avg, cached_avg, swap_used_avg, cpu_avg, cpu_max, samples, battery_charge_avg, battery_power_avg, battery_health_avg, battery_cycles_max, battery_temp_avg, net_in_avg, net_in_max, net_out_avg, net_out_max, disk_read_avg, disk_read_max, disk_write_avg, disk_write_max, disk_read_iops_avg, disk_read_iops_max, disk_write_iops_avg, disk_write_iops_max, disk_read_latency_avg, disk_read_latency_max, disk_write_latency_avg, disk_write_latency_max, disk_util_avg, disk_util_max, boot_free_avg, boot_free_min, boot_total, gpu_util_avg, gpu_util_max, gpu_power_avg, gpu_power_max, ane_power_avg, ane_power_max, cpu_die_avg, cpu_die_max, gpu_die_avg, gpu_die_max, ssd_temp_avg, ssd_temp_max, fan_rpm_avg, fan_rpm_max, thermal_state_max, cpu_p_die_max, cpu_e_die_max, airflow_temp_max, skin_temp_max, wireless_temp_max, vrail_temp_max, other_temp_max, load_1_avg, load_1_max, load_5_avg, load_15_avg)
+                INSERT INTO system_minute (bucket, pressure_avg, pressure_max, app_avg, wired_avg, compressed_avg, cached_avg, swap_used_avg, cpu_avg, cpu_max, samples, battery_charge_avg, battery_power_avg, battery_health_avg, battery_cycles_max, battery_temp_avg, net_in_avg, net_in_max, net_out_avg, net_out_max, disk_read_avg, disk_read_max, disk_write_avg, disk_write_max, disk_read_iops_avg, disk_read_iops_max, disk_write_iops_avg, disk_write_iops_max, disk_read_latency_avg, disk_read_latency_max, disk_write_latency_avg, disk_write_latency_max, disk_util_avg, disk_util_max, boot_free_avg, boot_free_min, boot_total, gpu_util_avg, gpu_util_max, gpu_power_avg, gpu_power_max, ane_power_avg, ane_power_max, cpu_die_avg, cpu_die_max, gpu_die_avg, gpu_die_max, ssd_temp_avg, ssd_temp_max, fan_rpm_avg, fan_rpm_max, thermal_state_max, cpu_p_die_max, cpu_e_die_max, airflow_temp_max, skin_temp_max, wireless_temp_max, vrail_temp_max, other_temp_max, load_1_avg, load_1_max, load_5_avg, load_15_avg,
+                    pressure_min, cpu_min, net_in_min, net_out_min, disk_read_min, disk_write_min,
+                    gpu_util_min, load_1_min, app_min, wired_min, compressed_min, cached_min,
+                    swap_used_min, cpu_die_min, gpu_die_min,
+                    app_max, wired_max, compressed_max, cached_max, swap_used_max,
+                    cpu_die_samples, gpu_die_samples, bucket_seconds,
+                    swap_in_avg, swap_out_avg, swap_in_max, swap_out_max, swap_activity_seconds)
                 SELECT CAST(timestamp / \(b) AS INTEGER) * \(b) AS b,
                        AVG(pressure_percent), MAX(pressure_percent),
                        CAST(AVG(app_memory) AS INTEGER), CAST(AVG(wired) AS INTEGER),
@@ -318,7 +324,17 @@ public enum Retention {
                        MAX(thermal_state),
                        MAX(cpu_p_die), MAX(cpu_e_die), MAX(airflow_temp), MAX(skin_temp),
                        MAX(wireless_temp), MAX(vrail_temp), MAX(other_temp),
-                       AVG(load_1), MAX(load_1), AVG(load_5), AVG(load_15)
+                         AVG(load_1), MAX(load_1), AVG(load_5), AVG(load_15),
+                         MIN(pressure_percent), MIN(cpu_load), MIN(net_in), MIN(net_out),
+                         MIN(disk_read), MIN(disk_write), MIN(gpu_util), MIN(load_1),
+                         MIN(app_memory), MIN(wired), MIN(compressed), MIN(cached_files),
+                         MIN(swap_used), MIN(cpu_die), MIN(gpu_die),
+                         MAX(app_memory), MAX(wired), MAX(compressed), MAX(cached_files),
+                         MAX(swap_used), COUNT(cpu_die), COUNT(gpu_die), \(b),
+                         SUM(swap_in_rate * memory_interval) / NULLIF(SUM(CASE WHEN swap_in_rate IS NOT NULL THEN memory_interval END), 0),
+                         SUM(swap_out_rate * memory_interval) / NULLIF(SUM(CASE WHEN swap_out_rate IS NOT NULL THEN memory_interval END), 0),
+                         MAX(swap_in_rate), MAX(swap_out_rate),
+                         SUM(CASE WHEN swap_in_rate IS NOT NULL AND swap_out_rate IS NOT NULL THEN memory_interval END)
                 FROM system_samples
                 WHERE timestamp >= ? AND timestamp < ?
                 GROUP BY b
@@ -367,7 +383,36 @@ public enum Retention {
                   vrail_temp_max = excluded.vrail_temp_max,
                   other_temp_max = excluded.other_temp_max,
                   load_1_avg = excluded.load_1_avg, load_1_max = excluded.load_1_max,
-                  load_5_avg = excluded.load_5_avg, load_15_avg = excluded.load_15_avg
+                  load_5_avg = excluded.load_5_avg,
+                  load_15_avg = excluded.load_15_avg,
+                  pressure_min = excluded.pressure_min,
+                  cpu_min = excluded.cpu_min,
+                  net_in_min = excluded.net_in_min,
+                  net_out_min = excluded.net_out_min,
+                  disk_read_min = excluded.disk_read_min,
+                  disk_write_min = excluded.disk_write_min,
+                  gpu_util_min = excluded.gpu_util_min,
+                  load_1_min = excluded.load_1_min,
+                  app_min = excluded.app_min,
+                  wired_min = excluded.wired_min,
+                  compressed_min = excluded.compressed_min,
+                  cached_min = excluded.cached_min,
+                  swap_used_min = excluded.swap_used_min,
+                  cpu_die_min = excluded.cpu_die_min,
+                  gpu_die_min = excluded.gpu_die_min,
+                  app_max = excluded.app_max,
+                  wired_max = excluded.wired_max,
+                  compressed_max = excluded.compressed_max,
+                  cached_max = excluded.cached_max,
+                  swap_used_max = excluded.swap_used_max,
+                  cpu_die_samples = excluded.cpu_die_samples,
+                  gpu_die_samples = excluded.gpu_die_samples,
+                  bucket_seconds = excluded.bucket_seconds,
+                  swap_in_avg = excluded.swap_in_avg,
+                  swap_out_avg = excluded.swap_out_avg,
+                  swap_in_max = excluded.swap_in_max,
+                  swap_out_max = excluded.swap_out_max,
+                  swap_activity_seconds = excluded.swap_activity_seconds
                 """, arguments: [watermark, completeUpTo])
 
         try setMeta(db, "minute_watermark", completeUpTo)
@@ -421,9 +466,21 @@ public enum Retention {
                   gpu_max = excluded.gpu_max
                 """, arguments: [watermark, completeUpTo])
 
+        // A sensor's valid-reading count, not the dense system row count, is
+        // its weight. Legacy inputs retain the previous approximate mean, but
+        // the resulting sensor count stays NULL so callers can identify it.
+        // An extremum is complete only when every input bucket recorded it;
+        // plain MIN/MAX would silently ignore legacy NULLs and claim a range
+        // for only the known subset of the hour.
         try db.execute(
             sql: """
-                INSERT INTO system_hour (bucket, pressure_avg, pressure_max, app_avg, wired_avg, compressed_avg, cached_avg, swap_used_avg, cpu_avg, cpu_max, samples, battery_charge_avg, battery_power_avg, battery_health_avg, battery_cycles_max, battery_temp_avg, net_in_avg, net_in_max, net_out_avg, net_out_max, disk_read_avg, disk_read_max, disk_write_avg, disk_write_max, disk_read_iops_avg, disk_read_iops_max, disk_write_iops_avg, disk_write_iops_max, disk_read_latency_avg, disk_read_latency_max, disk_write_latency_avg, disk_write_latency_max, disk_util_avg, disk_util_max, boot_free_avg, boot_free_min, boot_total, gpu_util_avg, gpu_util_max, gpu_power_avg, gpu_power_max, ane_power_avg, ane_power_max, cpu_die_avg, cpu_die_max, gpu_die_avg, gpu_die_max, ssd_temp_avg, ssd_temp_max, fan_rpm_avg, fan_rpm_max, thermal_state_max, cpu_p_die_max, cpu_e_die_max, airflow_temp_max, skin_temp_max, wireless_temp_max, vrail_temp_max, other_temp_max, load_1_avg, load_1_max, load_5_avg, load_15_avg)
+                INSERT INTO system_hour (bucket, pressure_avg, pressure_max, app_avg, wired_avg, compressed_avg, cached_avg, swap_used_avg, cpu_avg, cpu_max, samples, battery_charge_avg, battery_power_avg, battery_health_avg, battery_cycles_max, battery_temp_avg, net_in_avg, net_in_max, net_out_avg, net_out_max, disk_read_avg, disk_read_max, disk_write_avg, disk_write_max, disk_read_iops_avg, disk_read_iops_max, disk_write_iops_avg, disk_write_iops_max, disk_read_latency_avg, disk_read_latency_max, disk_write_latency_avg, disk_write_latency_max, disk_util_avg, disk_util_max, boot_free_avg, boot_free_min, boot_total, gpu_util_avg, gpu_util_max, gpu_power_avg, gpu_power_max, ane_power_avg, ane_power_max, cpu_die_avg, cpu_die_max, gpu_die_avg, gpu_die_max, ssd_temp_avg, ssd_temp_max, fan_rpm_avg, fan_rpm_max, thermal_state_max, cpu_p_die_max, cpu_e_die_max, airflow_temp_max, skin_temp_max, wireless_temp_max, vrail_temp_max, other_temp_max, load_1_avg, load_1_max, load_5_avg, load_15_avg,
+                    pressure_min, cpu_min, net_in_min, net_out_min, disk_read_min, disk_write_min,
+                    gpu_util_min, load_1_min, app_min, wired_min, compressed_min, cached_min,
+                    swap_used_min, cpu_die_min, gpu_die_min,
+                    app_max, wired_max, compressed_max, cached_max, swap_used_max,
+                    cpu_die_samples, gpu_die_samples, bucket_seconds,
+                    swap_in_avg, swap_out_avg, swap_in_max, swap_out_max, swap_activity_seconds)
                 SELECT CAST(bucket / 3600 AS INTEGER) * 3600 AS b,
                        SUM(pressure_avg * samples) / SUM(samples), MAX(pressure_max),
                        CAST(SUM(app_avg * samples) / SUM(samples) AS INTEGER),
@@ -465,11 +522,15 @@ public enum Retention {
                        SUM(ane_power_avg * samples)
                            / SUM(CASE WHEN ane_power_avg IS NOT NULL THEN samples END),
                        MAX(ane_power_max),
-                       SUM(cpu_die_avg * samples)
-                           / SUM(CASE WHEN cpu_die_avg IS NOT NULL THEN samples END),
+                       CASE WHEN COUNT(cpu_die_samples) = COUNT(*)
+                            THEN SUM(cpu_die_avg * cpu_die_samples) / NULLIF(SUM(cpu_die_samples), 0)
+                            ELSE SUM(cpu_die_avg * samples)
+                                / SUM(CASE WHEN cpu_die_avg IS NOT NULL THEN samples END) END,
                        MAX(cpu_die_max),
-                       SUM(gpu_die_avg * samples)
-                           / SUM(CASE WHEN gpu_die_avg IS NOT NULL THEN samples END),
+                       CASE WHEN COUNT(gpu_die_samples) = COUNT(*)
+                            THEN SUM(gpu_die_avg * gpu_die_samples) / NULLIF(SUM(gpu_die_samples), 0)
+                            ELSE SUM(gpu_die_avg * samples)
+                                / SUM(CASE WHEN gpu_die_avg IS NOT NULL THEN samples END) END,
                        MAX(gpu_die_max),
                        SUM(ssd_temp_avg * samples)
                            / SUM(CASE WHEN ssd_temp_avg IS NOT NULL THEN samples END),
@@ -487,7 +548,33 @@ public enum Retention {
                        SUM(load_5_avg * samples)
                            / SUM(CASE WHEN load_5_avg IS NOT NULL THEN samples END),
                        SUM(load_15_avg * samples)
-                           / SUM(CASE WHEN load_15_avg IS NOT NULL THEN samples END)
+                           / SUM(CASE WHEN load_15_avg IS NOT NULL THEN samples END),
+                       CASE WHEN COUNT(pressure_min) = COUNT(*) THEN MIN(pressure_min) END,
+                       CASE WHEN COUNT(cpu_min) = COUNT(*) THEN MIN(cpu_min) END,
+                       CASE WHEN COUNT(net_in_min) = COUNT(*) THEN MIN(net_in_min) END,
+                       CASE WHEN COUNT(net_out_min) = COUNT(*) THEN MIN(net_out_min) END,
+                       CASE WHEN COUNT(disk_read_min) = COUNT(*) THEN MIN(disk_read_min) END,
+                       CASE WHEN COUNT(disk_write_min) = COUNT(*) THEN MIN(disk_write_min) END,
+                       CASE WHEN COUNT(gpu_util_min) = COUNT(*) THEN MIN(gpu_util_min) END,
+                       CASE WHEN COUNT(load_1_min) = COUNT(*) THEN MIN(load_1_min) END,
+                       CASE WHEN COUNT(app_min) = COUNT(*) THEN MIN(app_min) END,
+                       CASE WHEN COUNT(wired_min) = COUNT(*) THEN MIN(wired_min) END,
+                       CASE WHEN COUNT(compressed_min) = COUNT(*) THEN MIN(compressed_min) END,
+                       CASE WHEN COUNT(cached_min) = COUNT(*) THEN MIN(cached_min) END,
+                       CASE WHEN COUNT(swap_used_min) = COUNT(*) THEN MIN(swap_used_min) END,
+                       CASE WHEN COUNT(cpu_die_min) = COUNT(*) THEN MIN(cpu_die_min) END,
+                       CASE WHEN COUNT(gpu_die_min) = COUNT(*) THEN MIN(gpu_die_min) END,
+                       CASE WHEN COUNT(app_max) = COUNT(*) THEN MAX(app_max) END,
+                       CASE WHEN COUNT(wired_max) = COUNT(*) THEN MAX(wired_max) END,
+                       CASE WHEN COUNT(compressed_max) = COUNT(*) THEN MAX(compressed_max) END,
+                       CASE WHEN COUNT(cached_max) = COUNT(*) THEN MAX(cached_max) END,
+                       CASE WHEN COUNT(swap_used_max) = COUNT(*) THEN MAX(swap_used_max) END,
+                       CASE WHEN COUNT(cpu_die_samples) = COUNT(*) THEN SUM(cpu_die_samples) END,
+                       CASE WHEN COUNT(gpu_die_samples) = COUNT(*) THEN SUM(gpu_die_samples) END,
+                       3600,
+                       SUM(swap_in_avg * swap_activity_seconds) / NULLIF(SUM(swap_activity_seconds), 0),
+                       SUM(swap_out_avg * swap_activity_seconds) / NULLIF(SUM(swap_activity_seconds), 0),
+                       MAX(swap_in_max), MAX(swap_out_max), SUM(swap_activity_seconds)
                 FROM system_minute
                 WHERE bucket >= ? AND bucket < ?
                 GROUP BY b
@@ -536,7 +623,36 @@ public enum Retention {
                   vrail_temp_max = excluded.vrail_temp_max,
                   other_temp_max = excluded.other_temp_max,
                   load_1_avg = excluded.load_1_avg, load_1_max = excluded.load_1_max,
-                  load_5_avg = excluded.load_5_avg, load_15_avg = excluded.load_15_avg
+                  load_5_avg = excluded.load_5_avg,
+                  load_15_avg = excluded.load_15_avg,
+                  pressure_min = excluded.pressure_min,
+                  cpu_min = excluded.cpu_min,
+                  net_in_min = excluded.net_in_min,
+                  net_out_min = excluded.net_out_min,
+                  disk_read_min = excluded.disk_read_min,
+                  disk_write_min = excluded.disk_write_min,
+                  gpu_util_min = excluded.gpu_util_min,
+                  load_1_min = excluded.load_1_min,
+                  app_min = excluded.app_min,
+                  wired_min = excluded.wired_min,
+                  compressed_min = excluded.compressed_min,
+                  cached_min = excluded.cached_min,
+                  swap_used_min = excluded.swap_used_min,
+                  cpu_die_min = excluded.cpu_die_min,
+                  gpu_die_min = excluded.gpu_die_min,
+                  app_max = excluded.app_max,
+                  wired_max = excluded.wired_max,
+                  compressed_max = excluded.compressed_max,
+                  cached_max = excluded.cached_max,
+                  swap_used_max = excluded.swap_used_max,
+                  cpu_die_samples = excluded.cpu_die_samples,
+                  gpu_die_samples = excluded.gpu_die_samples,
+                  bucket_seconds = excluded.bucket_seconds,
+                  swap_in_avg = excluded.swap_in_avg,
+                  swap_out_avg = excluded.swap_out_avg,
+                  swap_in_max = excluded.swap_in_max,
+                  swap_out_max = excluded.swap_out_max,
+                  swap_activity_seconds = excluded.swap_activity_seconds
                 """, arguments: [watermark, completeUpTo])
 
         try setMeta(db, "hour_watermark", completeUpTo)

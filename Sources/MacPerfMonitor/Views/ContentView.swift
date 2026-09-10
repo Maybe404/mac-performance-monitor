@@ -21,6 +21,7 @@ struct ContentView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var helper: HelperManager
     @EnvironmentObject private var loginItem: LoginItemManager
+    @EnvironmentObject private var monitor: MonitorSelection
 
     @State private var tab: MainWindowTab = .dashboard
 
@@ -32,6 +33,8 @@ struct ContentView: View {
     /// Lives above `TabGate`, so switching tabs does not discard an open trace.
     /// Closing the main window still unmounts `ContentView` and releases it.
     @State private var importedTrace: ImportedTrace?
+    @State private var explorer = DataExplorerModel()
+    @State private var investigationRevision = 0
 
     var body: some View {
         TabView(selection: $tab) {
@@ -66,9 +69,10 @@ struct ContentView: View {
                 .tag(MainWindowTab.hardware)
 
             TabGate(isActive: tab == .analytics) {
-                AnalyticsView(imported: $importedTrace)
+                AnalyticsView(explorer: explorer, imported: $importedTrace)
+                    .id(investigationRevision)
             }
-            .tabItem { Label("Analytics", systemImage: "chart.xyaxis.line") }
+            .tabItem { Label("Explorer", systemImage: "waveform.path.ecg.rectangle") }
             .tag(MainWindowTab.analytics)
 
             TabGate(isActive: tab == .insights) { InsightsView() }
@@ -137,6 +141,7 @@ struct ContentView: View {
                 tab = .network
                 appState.showNetworkTab = false
             }
+            consumeAlertInvestigation()
         }
         .onChange(of: appState.navigationTarget) { _, newValue in
             if newValue != nil { tab = .processes }
@@ -162,6 +167,19 @@ struct ContentView: View {
         .onChange(of: appState.pendingTraceURL) { _, url in
             if url != nil { tab = .analytics }
         }
+        .onChange(of: appState.alertInvestigation) { _, _ in consumeAlertInvestigation() }
+    }
+
+    private func consumeAlertInvestigation() {
+        guard let request = appState.alertInvestigation else { return }
+        appState.alertInvestigation = nil
+        appState.navigationTarget = nil
+        importedTrace = nil
+        investigationRevision &+= 1
+        for identity in monitor.identities { monitor.remove(identity) }
+        for identity in request.identities { monitor.add(identity) }
+        explorer.investigate(request)
+        tab = .analytics
     }
 }
 

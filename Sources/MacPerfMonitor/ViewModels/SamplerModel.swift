@@ -41,6 +41,8 @@ final class SamplerModel: ObservableObject {
     /// Alert conditions that remain active after their notification edge fires.
     /// The combined menu bar uses this for its red alarm state.
     @Published private(set) var activeAlertKinds: Set<Alert.Kind> = []
+    @Published private(set) var activeAlerts: [Alert] = []
+    @Published private(set) var alertObservations: [AlertIncident] = []
 
     /// Identities the user force-quit through MacPerfMonitor within the retention
     /// window, so the process list can keep showing them greyed out as clear
@@ -485,10 +487,18 @@ final class SamplerModel: ObservableObject {
     private var cachedConsumerSeries:
         (at: Date, identities: [ProcessIdentity], series: [ProcessIdentity: [(Date, UInt64)]])?
 
-    /// The alert decision engine and its inputs, all confined to `queue`. The
-    /// config is pushed in from settings via `setAlertConfig(_:)`; the leaking
-    /// set is refreshed from the leak board on the retention cadence.
+    /// The alert engine and checkpoints are confined to `queue`. Live growth
+    /// evidence is independent of the historical leak board and recording mode.
     private let alertEngine = AlertEngine()
+    private let incidentStore: AlertIncidentStore? =
+        Bundle.main.bundleURL.pathExtension == "app"
+        ? AlertIncidentStore(
+            url: MacPerfMonitorDatabase.defaultURL().deletingLastPathComponent()
+                .appendingPathComponent("alerts/incidents.json")) : nil
+    private var restoredIncidents = false
+    private var lastIncidentSave = Date.distantPast
+    private var savedIncidentRevision: UInt64 = 0
+    private var lastAlertEvaluation = Date.distantPast
     private var alertConfig = AlertConfig.default
     private var leakingIDs: Set<ProcessIdentity> = []
     private var pressureMonitor: MemoryPressureMonitor?
@@ -562,6 +572,18 @@ final class SamplerModel: ObservableObject {
     func start() {
         queue.async { [weak self] in
             guard let self, self.timer == nil else { return }
+            if !self.restoredIncidents {
+                self.restoredIncidents = true
+                do {
+                    if let snapshot = try self.incidentStore?.load() {
+                        self.alertEngine.restore(snapshot)
+                    }
+                } catch {
+                    AppLog.alerts.error(
+                        "could not restore alert state: \(String(describing: error), privacy: .public)"
+                    )
+                }
+            }
             // macOS 26/27 App Nap is more aggressive than what Stats targets: a plain
             // GCD timer on a `.default`/`.utility` queue gets coalesced out to ~5 s
             // and freezes the menu bar. Keeping the fast heartbeat reliable takes
@@ -647,7 +669,19 @@ final class SamplerModel: ObservableObject {
     /// Push the latest alert preferences onto the sampler queue, where the
     /// engine reads them. Called from settings whenever the config changes.
     func setAlertConfig(_ config: AlertConfig) {
-        queue.async { self.alertConfig = config }
+        queue.async {
+            self.alertConfig = config
+            if !config.anyEnabled {
+                self.alertEngine.reset()
+                self.incidentStore?.save(self.alertEngine.incidentSnapshot)
+                self.savedIncidentRevision = 0
+                DispatchQueue.main.async {
+                    if !self.activeAlerts.isEmpty { self.activeAlerts = [] }
+                    if !self.activeAlertKinds.isEmpty { self.activeAlertKinds = [] }
+                    if !self.alertObservations.isEmpty { self.alertObservations = [] }
+                }
+            }
+        }
     }
 
     /// Tell the sampler whether a menu bar item is on screen reading its
@@ -1053,7 +1087,8 @@ final class SamplerModel: ObservableObject {
         // with a vertical climb from the axis.
         let hasBaseline = sampler.hasBaseline
         let (system, cpu, battery, network, disk, gpu) = sampler.tickSystem(
-            readGPU: gpuSamplingEnabled || gpuConsumers > 0 || persistenceEnabled,
+            readGPU: gpuSamplingEnabled || gpuConsumers > 0 || persistenceEnabled
+                || alertConfig.highGPUEnabled,
             gpuReadInterval: gpuConsumers > 0 ? 0 : 1)
         lastSystemTick = (system, cpu, battery, network, disk, gpu)
         diagnostics.recordSystemTick(duration: TickDiagnostics.now() - tickStart)
@@ -1110,12 +1145,15 @@ final class SamplerModel: ObservableObject {
         let force = forceHeavy || forceHeavyPending
         let scanDue = force || !hasProcessSnapshot || heavyTickCounter >= heavyEveryTicks
         let tableDue = !hasProcessSnapshot || tableTickCounter >= tableEveryTicks
-        let alertsDue = force || tableDue
+        let alertsDue =
+            force
+            || (alertConfig.anyEnabled
+                && system.timestamp.timeIntervalSince(lastAlertEvaluation) >= 2)
         let popoverDue =
             popoverOpen
             && (force || !hasProcessSnapshot || popoverTickCounter >= popoverEveryTicks)
         let runScan =
-            needProcesses && (popoverDue || scanDue || tableDue)
+            needProcesses && (popoverDue || scanDue || tableDue || (processAlerts && alertScanDue))
             && (!alertsAreTheOnlyReason || alertScanDue)
         if runScan { alertScanTickCounter = 0 }
         // The dial gate for everything visible. An open popover pins it to
@@ -1176,12 +1214,12 @@ final class SamplerModel: ObservableObject {
             }
         }
 
-        // System-level alerts (pressure, swap, thermal, CPU, GPU) have all they
-        // need from the cheap tick. Evaluate them here when no scan ran, so a
-        // pressure alert still fires with the app recording nothing and showing
-        // nothing. The per-process list is whatever the last scan left.
-        if alertsDue, !runScan, alertConfig.anyEnabled {
-            evaluateAlerts(system: system, processes: carriedProcesses, cpu: cpu)
+        // System alerts use fresh cheap ticks; process evidence carries its own
+        // timestamp until the scan completes. Neither waits for the display dial.
+        if alertsDue, alertConfig.anyEnabled {
+            evaluateAlerts(
+                system: system, processes: carriedProcesses, cpu: cpu,
+                processesAvailable: hasProcessSnapshot)
         }
 
         // Between table publishes, re-read just the rows on screen so their
@@ -1306,8 +1344,8 @@ final class SamplerModel: ObservableObject {
             )
         }
         // The row itself was written on the scan queue; the checkpoint and
-        // retention cadences count scan-due ticks here. Alert evaluation
-        // follows the table cadence.
+        // retention cadences count scan-due ticks here. Fresh process evidence
+        // joins the alert evaluation when this scan was requested by alerting.
         if job.scanDue { runPersistenceMaintenance(snapshot) }
         if job.alertsDue {
             evaluateAlerts(
@@ -1730,21 +1768,60 @@ final class SamplerModel: ObservableObject {
     /// Run the alert engine over the full snapshot (all processes, so the
     /// per-process ceiling sees everything) and forward any newly-fired alerts
     /// to the main-thread sink. Runs on `queue`.
-    private func evaluateAlerts(system: SystemSample, processes: [ProcessSample], cpu: CPUSample) {
+    private func evaluateAlerts(
+        system: SystemSample, processes: [ProcessSample], cpu: CPUSample,
+        processesAvailable: Bool = true
+    ) {
+        lastAlertEvaluation = max(lastAlertEvaluation, system.timestamp)
         let alerts = alertEngine.evaluate(
             system: system,
             processes: processes,
-            leakingProcesses: leakingIDs,
             config: alertConfig,
             cpu: cpu,
-            gpu: lastSystemTick?.gpu)
+            gpu: lastSystemTick?.gpu,
+            expectedInterval: max(2, interval),
+            processSnapshotAvailable: processesAvailable && !processes.isEmpty)
         let activeKinds = alertEngine.activeKinds
+        let activeAlerts = alertEngine.activeAlerts
+        let observations = alertEngine.observations
+        let snapshot = alertEngine.incidentSnapshot
+        if alertEngine.incidentRevision != savedIncidentRevision || !alerts.isEmpty
+            || (!snapshot.incidents.isEmpty
+                && system.timestamp.timeIntervalSince(lastIncidentSave) >= 30)
+        {
+            savedIncidentRevision = alertEngine.incidentRevision
+            lastIncidentSave = system.timestamp
+            incidentStore?.save(snapshot)
+        }
         let sink = onAlertsFired
         DispatchQueue.main.async { [weak self] in
+            if self?.activeAlerts != activeAlerts {
+                self?.activeAlerts = activeAlerts
+            }
             if self?.activeAlertKinds != activeKinds {
                 self?.activeAlertKinds = activeKinds
             }
+            if self?.alertObservations != observations { self?.alertObservations = observations }
             if !alerts.isEmpty { sink(alerts) }
+        }
+    }
+
+    func recordAlertDelivery(_ ids: [String], outcome: String, attemptedAt: Date) {
+        queue.async {
+            self.incidentStore?.recordDelivery(ids, outcome: outcome)
+            if outcome == "failed" {
+                self.alertEngine.recordDeliveryFailure(ids, attemptedAt: attemptedAt)
+                self.incidentStore?.save(self.alertEngine.incidentSnapshot)
+            }
+        }
+    }
+
+    func snoozeAlert(_ id: String, seconds: TimeInterval = 3600) {
+        queue.async {
+            self.alertEngine.snooze(id, until: Date().addingTimeInterval(seconds))
+            self.incidentStore?.save(self.alertEngine.incidentSnapshot)
+            let alerts = self.alertEngine.activeAlerts
+            DispatchQueue.main.async { self.activeAlerts = alerts }
         }
     }
 
@@ -1804,8 +1881,14 @@ final class SamplerModel: ObservableObject {
     /// `queue`, and the published row highlight on main.
     private func scheduleLeakScan(_ store: SampleStore) {
         let generation = persistenceGeneration
+        let live = Set(carriedProcesses.map(\.id))
+        let config = LeakDetector.Config(
+            maximumGap: max(180, Self.configuredStandardResInterval() * 2))
         leakScanQueue.async { [weak self] in
-            let entries = (try? store.leakBoard()) ?? []
+            guard let entries = try? store.leakBoard(config: config, liveIdentities: live) else {
+                AppLog.alerts.error("leak-board read failed; retaining the last evidence")
+                return
+            }
             guard let self else { return }
             self.queue.async {
                 guard generation == self.persistenceGeneration,
@@ -2350,6 +2433,92 @@ final class SamplerModel: ObservableObject {
 
     // MARK: - History tab (M6)
 
+    func loadExplorerWindow(
+        domain: ClosedRange<Date>, identities: [ProcessIdentity],
+        completion: @escaping (Result<ExplorerWindowData, Error>) -> Void
+    ) {
+        guard let store else {
+            completion(
+                .success(
+                    ExplorerWindowData(domain: domain, granularity: .raw, system: [], processes: [])
+                ))
+            return
+        }
+        readQueue.async {
+            let result = Result {
+                let duration = domain.upperBound.timeIntervalSince(domain.lowerBound)
+                var tier = try store.finestGranularityCovering(
+                    from: domain.lowerBound, to: domain.upperBound)
+                if duration > 2 * 86_400 {
+                    tier = .hour
+                } else if duration > 2 * 3600, tier == .raw {
+                    tier = .minute
+                }
+                return try ExplorerWindowData(
+                    domain: domain, granularity: tier,
+                    system: store.systemHistory(
+                        from: domain.lowerBound, to: domain.upperBound, granularity: tier),
+                    processes: store.explorerProcessHistories(
+                        identities: identities,
+                        from: domain.lowerBound, to: domain.upperBound, granularity: tier))
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    func searchExplorerProcesses(
+        domain: ClosedRange<Date>, query: String,
+        completion: @escaping (Result<[ExplorerProcess], Error>) -> Void
+    ) {
+        guard let store else {
+            completion(.success([]))
+            return
+        }
+        readQueue.async {
+            let result = Result {
+                try store.explorerProcesses(
+                    from: domain.lowerBound, to: domain.upperBound, search: query)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    func loadExplorerProcessesAt(
+        _ date: Date, completion: @escaping (Result<[ExplorerProcessObservation], Error>) -> Void
+    ) {
+        guard let store else {
+            completion(.success([]))
+            return
+        }
+        let freshness = max(60, Self.configuredStandardResInterval())
+        readQueue.async {
+            let result = Result {
+                let tier = try store.finestGranularityCovering(from: date, to: date)
+                return try store.explorerProcessesAt(
+                    date, granularity: tier, rawFreshness: freshness)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    func loadExplorerMachineRecordAt(
+        _ date: Date, completion: @escaping (Result<ExplorerMachineRecord?, Error>) -> Void
+    ) {
+        guard let store else {
+            completion(.success(nil))
+            return
+        }
+        let freshness = max(15, Self.configuredHighResInterval() * 3)
+        readQueue.async {
+            let result = Result {
+                let tier = try store.finestGranularityCovering(from: date, to: date)
+                return try store.explorerMachineRecordAt(
+                    date, granularity: tier, rawFreshness: freshness)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     /// Load the top-consumers leaderboard for the History tab off the main
     /// thread, then deliver it back on the main thread.
     func loadTopConsumers(
@@ -2599,7 +2768,12 @@ final class SamplerModel: ObservableObject {
         if let cached = cachedLeakBoard, Date().timeIntervalSince(cached.at) < leakBoardMaxAge {
             return cached.entries
         }
-        let entries = (try? store.leakBoard()) ?? []
+        guard
+            let entries = try? store.leakBoard(
+                config: .init(maximumGap: max(180, Self.configuredStandardResInterval() * 2)))
+        else {
+            return cachedLeakBoard?.entries ?? []
+        }
         cachedLeakBoard = (Date(), entries)
         return entries
     }

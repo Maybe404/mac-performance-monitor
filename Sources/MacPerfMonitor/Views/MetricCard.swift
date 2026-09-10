@@ -69,6 +69,7 @@ struct MetricCardData: Identifiable {
     /// repaint from this feed on every tick; the rest of the card is static.
     /// `value`, `samples` and `yDomain` then only seed the detail sheet.
     var live: MetricCardFeed? = nil
+    var statisticsModel: TrendModel? = nil
 
     var id: String { label }
 
@@ -85,6 +86,15 @@ struct MetricCardData: Identifiable {
         copy.samples = live.samples
         copy.companions = live.companionSamples
         copy.yDomain = live.yDomain
+        copy.tint = Color(nsColor: live.tint)
+        if live.trend.model.statisticsInterval != nil {
+            var model = live.trend.model
+            model.bare = false
+            model.showsTimeAxis = true
+            model.plotBorder = true
+            model.leftGutter = 60
+            copy.statisticsModel = model
+        }
         copy.live = nil
         return copy
     }
@@ -127,13 +137,17 @@ struct MetricCard: View {
     /// the page's range data reloads. Gauges (live state) are left as-is.
     var loading: Bool = false
 
-    @State private var showDetail = false
+    private struct DetailSnapshot: Identifiable {
+        let id = UUID()
+        let data: MetricCardData
+        let xDomain: ClosedRange<Date>?
+    }
+
+    @State private var detailSnapshot: DetailSnapshot?
     @State private var hovering = false
 
     var body: some View {
-        Button {
-            if data.explanation != nil { showDetail = true }
-        } label: {
+        Button(action: openDetails) {
             cardBody
         }
         .buttonStyle(.plain)
@@ -146,9 +160,14 @@ struct MetricCard: View {
         .accessibilityHint(
             data.explanation != nil ? "Opens an explanation of this figure." : ""
         )
-        .sheet(isPresented: $showDetail) {
-            MetricDetailSheet(data: data.snapshot, xDomain: data.live?.xDomain ?? xDomain)
+        .sheet(item: $detailSnapshot) { snapshot in
+            MetricDetailSheet(data: snapshot.data, xDomain: snapshot.xDomain)
         }
+    }
+
+    private func openDetails() {
+        guard data.explanation != nil, !loading else { return }
+        detailSnapshot = DetailSnapshot(data: data.snapshot, xDomain: data.live?.xDomain ?? xDomain)
     }
 
     private var cardBody: some View {
@@ -197,13 +216,13 @@ struct MetricCard: View {
                     MetricGaugeBar(
                         fraction: gauge.fraction, threshold: gauge.threshold, tint: data.tint)
                 } else if let live = data.live {
-                    ScaledSparkline(feed: live)
+                    ScaledSparkline(feed: live, onActivate: openDetails)
                 } else if loading {
                     ProgressView()
                         .controlSize(.small)
                         .frame(maxWidth: .infinity, alignment: .center)
                 } else if data.samples.count >= 2 {
-                    StaticCardStrip(data: data, xDomain: xDomain)
+                    StaticCardStrip(data: data, xDomain: xDomain, onActivate: openDetails)
                 } else {
                     Color.clear
                 }
@@ -246,6 +265,7 @@ struct MetricCard: View {
 private struct StaticCardStrip: View {
     let data: MetricCardData
     var xDomain: ClosedRange<Date>?
+    var onActivate: (() -> Void)?
     @State private var feed = MetricCardFeed()
 
     /// What a republish depends on. The samples are append-only or reloaded
@@ -266,7 +286,7 @@ private struct StaticCardStrip: View {
     }
 
     var body: some View {
-        ScaledSparkline(feed: feed)
+        ScaledSparkline(feed: feed, scrubbable: true, onActivate: onActivate)
             .onAppear(perform: publish)
             .onChange(of: key) { _ in publish() }
     }
@@ -277,18 +297,21 @@ private struct StaticCardStrip: View {
         let peak = column.range.map { t("peak %@", data.unit.format($0.max)) }
         feed.publish(
             value: data.value, tint: NSColor(data.tint), column: column, xDomain: xDomain,
-            yDomain: data.yDomain, peak: peak)
+            yDomain: data.yDomain, peak: peak, name: t(data.label), format: data.unit.format)
     }
 }
 
 private struct ScaledSparkline: View {
     let feed: MetricCardFeed
+    var scrubbable = false
+    var onActivate: (() -> Void)?
     @State private var peak: String?
     @State private var observer: UUID?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            LiveSparkline(feed: feed, lineWidth: 1.5)
+            LiveSparkline(
+                feed: feed, lineWidth: 1.5, scrubbable: scrubbable, onActivate: onActivate)
             VStack(alignment: .trailing, spacing: 0) {
                 if let peak {
                     Text(peak)
@@ -302,6 +325,7 @@ private struct ScaledSparkline: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 0.5)
             }
+            .allowsHitTesting(false)
         }
         .onAppear {
             peak = feed.peak
@@ -465,15 +489,39 @@ struct MetricDetailSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             header
-            MetricDetailChart(
-                samples: data.samples, companions: data.companions,
-                seriesLabel: data.seriesLabel, tint: data.tint, unit: data.unit,
-                xDomain: xDomain, yDomain: data.yDomain
-            )
-            .frame(height: data.companions.isEmpty ? 300 : 324)
-            if let explanation = data.explanation {
-                explanationSection("What it means", explanation.meaning)
-                explanationSection("How it's calculated", explanation.calculation)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let model = data.statisticsModel {
+                        Text("Snapshot, not live")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let domain = model.xDomain {
+                            Text(
+                                TrendStatistics.intervalText(
+                                    start: domain.lowerBound.timeIntervalSinceReferenceDate,
+                                    end: domain.upperBound.timeIntervalSinceReferenceDate)
+                            )
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        }
+                        TrendSnapshotChart(model: model).frame(height: 300)
+                        TrendStatisticsCaption(model: model)
+                        Text("Selected-range statistics").font(.headline)
+                        TrendStatisticsSummary(model: model)
+                    } else {
+                        MetricDetailChart(
+                            samples: data.samples, companions: data.companions,
+                            seriesLabel: data.seriesLabel, tint: data.tint, unit: data.unit,
+                            xDomain: xDomain, yDomain: data.yDomain
+                        )
+                        .frame(height: data.companions.isEmpty ? 300 : 324)
+                    }
+                    if let explanation = data.explanation {
+                        explanationSection("What it means", explanation.meaning)
+                        explanationSection("How it's calculated", explanation.calculation)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
             HStack {
@@ -483,7 +531,9 @@ struct MetricDetailSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 760)
+        .frame(
+            width: 760,
+            height: min(780, max(480, (NSScreen.main?.visibleFrame.height ?? 900) - 120)))
     }
 
     private var header: some View {
@@ -808,7 +858,25 @@ enum MemoryMetrics {
             window.values(.pressurePercent), free[...], window.values(.appMemory),
             window.values(.compressed), window.values(.cachedFiles), window.values(.swapUsed),
         ]
-        for i in cards.indices { cards[i].column = column(columns[i]) }
+        let minima: [SystemHistoryWindow.Column?] = [
+            .pressurePercentMinimum, nil, .appMemoryMinimum, .compressedMinimum,
+            .cachedFilesMinimum, .swapUsedMinimum,
+        ]
+        let maxima: [SystemHistoryWindow.Column?] = [
+            .pressurePercentPeak, nil, .appMemoryPeak, .compressedPeak,
+            .cachedFilesPeak, .swapUsedPeak,
+        ]
+        let durations = window.values(.bucketDuration)
+        for index in cards.indices {
+            let rawBounds = zip(columns[index], durations).map { value, duration in
+                duration == 0 ? value : Double.nan
+            }[...]
+            cards[index].column = LiveColumn(
+                times: window.timestamps, values: columns[index],
+                highs: maxima[index].map { window.values($0) } ?? rawBounds,
+                lows: minima[index].map { window.values($0) } ?? rawBounds,
+                weights: window.values(.sampleCount), durations: durations)
+        }
         return cards
     }
 

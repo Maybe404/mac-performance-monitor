@@ -204,6 +204,30 @@ public enum MacPerfMonitorDatabase {
         migrator.registerMigration("v16-load-averages") { db in
             try db.execute(sql: Schema.v16)
         }
+        // Keep full ranges, sensor-valid weights and the actual bucket width.
+        // These columns deliberately have no defaults or backfill: a legacy
+        // average cannot recover a discarded minimum or a sensor sample count.
+        migrator.registerMigration("v17-system-history-statistics") { db in
+            try db.execute(sql: Schema.v17)
+        }
+        migrator.registerMigration("v18-swap-activity") { db in
+            for (column, type) in [
+                ("swap_sample_valid", "INTEGER"), ("pressure_sample_valid", "INTEGER"),
+                ("swap_in_rate", "REAL"), ("swap_out_rate", "REAL"),
+                ("swap_in_pages_delta", "INTEGER"), ("swap_out_pages_delta", "INTEGER"),
+                ("memory_page_size", "INTEGER"), ("memory_interval", "REAL"),
+            ] {
+                try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN \(column) \(type)")
+            }
+            for table in ["system_minute", "system_hour"] {
+                for column in [
+                    "swap_in_avg", "swap_out_avg", "swap_in_max", "swap_out_max",
+                    "swap_activity_seconds",
+                ] {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(column) REAL")
+                }
+            }
+        }
         return migrator
     }
 }
@@ -641,6 +665,56 @@ enum Schema {
         ALTER TABLE system_hour ADD COLUMN load_1_max REAL;
         ALTER TABLE system_hour ADD COLUMN load_5_avg REAL;
         ALTER TABLE system_hour ADD COLUMN load_15_avg REAL;
+        """
+
+    static let v17 = """
+        ALTER TABLE system_minute ADD COLUMN pressure_min REAL;
+        ALTER TABLE system_minute ADD COLUMN cpu_min REAL;
+        ALTER TABLE system_minute ADD COLUMN net_in_min REAL;
+        ALTER TABLE system_minute ADD COLUMN net_out_min REAL;
+        ALTER TABLE system_minute ADD COLUMN disk_read_min REAL;
+        ALTER TABLE system_minute ADD COLUMN disk_write_min REAL;
+        ALTER TABLE system_minute ADD COLUMN gpu_util_min REAL;
+        ALTER TABLE system_minute ADD COLUMN load_1_min REAL;
+        ALTER TABLE system_minute ADD COLUMN app_min INTEGER;
+        ALTER TABLE system_minute ADD COLUMN wired_min INTEGER;
+        ALTER TABLE system_minute ADD COLUMN compressed_min INTEGER;
+        ALTER TABLE system_minute ADD COLUMN cached_min INTEGER;
+        ALTER TABLE system_minute ADD COLUMN swap_used_min INTEGER;
+        ALTER TABLE system_minute ADD COLUMN cpu_die_min REAL;
+        ALTER TABLE system_minute ADD COLUMN gpu_die_min REAL;
+        ALTER TABLE system_minute ADD COLUMN app_max INTEGER;
+        ALTER TABLE system_minute ADD COLUMN wired_max INTEGER;
+        ALTER TABLE system_minute ADD COLUMN compressed_max INTEGER;
+        ALTER TABLE system_minute ADD COLUMN cached_max INTEGER;
+        ALTER TABLE system_minute ADD COLUMN swap_used_max INTEGER;
+        ALTER TABLE system_minute ADD COLUMN cpu_die_samples INTEGER;
+        ALTER TABLE system_minute ADD COLUMN gpu_die_samples INTEGER;
+        ALTER TABLE system_minute ADD COLUMN bucket_seconds REAL;
+
+        ALTER TABLE system_hour ADD COLUMN pressure_min REAL;
+        ALTER TABLE system_hour ADD COLUMN cpu_min REAL;
+        ALTER TABLE system_hour ADD COLUMN net_in_min REAL;
+        ALTER TABLE system_hour ADD COLUMN net_out_min REAL;
+        ALTER TABLE system_hour ADD COLUMN disk_read_min REAL;
+        ALTER TABLE system_hour ADD COLUMN disk_write_min REAL;
+        ALTER TABLE system_hour ADD COLUMN gpu_util_min REAL;
+        ALTER TABLE system_hour ADD COLUMN load_1_min REAL;
+        ALTER TABLE system_hour ADD COLUMN app_min INTEGER;
+        ALTER TABLE system_hour ADD COLUMN wired_min INTEGER;
+        ALTER TABLE system_hour ADD COLUMN compressed_min INTEGER;
+        ALTER TABLE system_hour ADD COLUMN cached_min INTEGER;
+        ALTER TABLE system_hour ADD COLUMN swap_used_min INTEGER;
+        ALTER TABLE system_hour ADD COLUMN cpu_die_min REAL;
+        ALTER TABLE system_hour ADD COLUMN gpu_die_min REAL;
+        ALTER TABLE system_hour ADD COLUMN app_max INTEGER;
+        ALTER TABLE system_hour ADD COLUMN wired_max INTEGER;
+        ALTER TABLE system_hour ADD COLUMN compressed_max INTEGER;
+        ALTER TABLE system_hour ADD COLUMN cached_max INTEGER;
+        ALTER TABLE system_hour ADD COLUMN swap_used_max INTEGER;
+        ALTER TABLE system_hour ADD COLUMN cpu_die_samples INTEGER;
+        ALTER TABLE system_hour ADD COLUMN gpu_die_samples INTEGER;
+        ALTER TABLE system_hour ADD COLUMN bucket_seconds REAL;
         """
 }
 

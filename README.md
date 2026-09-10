@@ -57,12 +57,18 @@ Free and open source. No telemetry. Every sample stays on your Mac.
   Thunderbolt, Bluetooth, audio, cameras, storage, network, Wi-Fi via CoreWLAN,
   Metal limits, instruction-set features, secure boot). Read on demand with a
   Refresh button, never on the sampling tick; copy any item or save a report.
-- **Leak detection:** flags processes whose footprint climbs steadily, plus a log of
-  pressure events over time.
+- **Memory growth:** tracks continued process growth, filters plateaus and stale
+  readings, and separates quiet observations from actionable growth alerts.
 - **Deep-dive diagnostics:** explains what a process is and whether its behavior is
   normal, using signed, updatable check packs.
-- **Insights and alerts:** quiet-by-default notifications for critical pressure,
-  sustained swap, per-process ceilings, and suspected leaks.
+- **Insights and alerts:** evidence-based notifications for critical pressure,
+  swap growth and paging strain, process growth, and explicit memory budgets.
+  Worsening incidents can escalate; settled high swap stays quiet. See
+  [Adaptive alerts](docs/adaptive-alerts.md).
+- **Explorer:** investigate a chosen time with linked machine, process, and
+  sensor charts. Compare up to eight running or recorded processes, inspect
+  source values and timestamps, and export the visible data. Hardware inventory
+  is a current snapshot, clearly separate from recorded history.
 
 ## Screenshots
 
@@ -100,9 +106,11 @@ Hardware: this Mac's inventory, searchable, with the chip drawn core by core:
 
 ![Hardware](docs/images/hardware.png)
 
-Analytics: build your own per-process charts over any window:
+Explorer: pin a time, compare processes, and inspect machine and sensor history.
+This preview uses synthetic data. See the [Explorer guide](docs/explorer-design.md)
+for the workflow and recording limits:
 
-![Analytics](docs/images/analytics.png)
+![Explorer](docs/images/explorer.png)
 
 Insights: what changed, pressure events, and the heaviest consumers:
 

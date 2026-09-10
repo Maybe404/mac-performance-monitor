@@ -1,10 +1,16 @@
 # Chart rules
 
-How this app draws data over time. One set of rules for every chart, so the
-next fix is a policy change rather than another local patch.
+The current policy is [Dashboard chart standard](dashboard-chart-standard.md).
+It defines fixed time intervals, weighted averages, unsmoothed translucent ranges,
+gap-aware hover details, and frozen detail views for every Dashboard card.
+It also records the remaining app-wide rollout work.
 
-Status: agreed for 2.0.0. The audit at the end says which surfaces already
-follow the rules and which do not.
+The notes below describe the earlier 5 September 2026 implementation. Other
+tabs still use that renderer. Its pixel-based ranges, trailing average, and
+mean-as-minimum fallback are **not** the target for new charts. In particular,
+the old audit below no longer describes the Dashboard.
+
+## Previous policy (superseded)
 
 ## The problem these rules exist to solve
 

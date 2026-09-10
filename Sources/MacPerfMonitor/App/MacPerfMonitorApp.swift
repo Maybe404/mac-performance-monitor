@@ -300,6 +300,7 @@ final class AppState: ObservableObject {
     /// alert). The main window observes this to switch to the Processes tab and
     /// select the process, then clears it. Nil when there is nothing pending.
     @Published var navigationTarget: ProcessIdentity?
+    @Published var alertInvestigation: AlertInvestigation?
 
     /// A process awaiting a force-quit confirmation. Any surface that lists a
     /// process sets this; the single confirmation hosted on the main window
@@ -478,6 +479,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         alertCenter.setDelegate(self)
         alertCenter.requestAuthorization()
         model.onAlertsFired = { [alertCenter] alerts in alertCenter.deliver(alerts) }
+        alertCenter.onDeliveryOutcome = { [weak model] ids, outcome, attemptedAt in
+            model?.recordAlertDelivery(ids, outcome: outcome, attemptedAt: attemptedAt)
+        }
         model.setAlertConfig(alertSettings.config)
         alertSettings.$config
             .sink { [weak model] config in model?.setAlertConfig(config) }
@@ -839,7 +843,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         withCompletionHandler completionHandler:
             @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        completionHandler(
+            notification.request.content.sound == nil ? [.banner] : [.banner, .sound])
     }
 
     /// Handle a notification click. Always surface the main window; when the
@@ -852,7 +857,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let identity = AlertUserInfo.identity(from: userInfo) {
+        if let investigation = AlertUserInfo.investigation(from: userInfo) {
+            appState.alertInvestigation = investigation
+            appState.requestedMainTab = .analytics
+        } else if let identity = AlertUserInfo.identity(from: userInfo) {
             // Set before opening the window so a freshly mounted Processes tab
             // consumes it on appear.
             appState.navigationTarget = identity

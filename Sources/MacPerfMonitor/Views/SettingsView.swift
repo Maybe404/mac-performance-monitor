@@ -300,18 +300,19 @@ private struct AlertsSettingsView: View {
                 Text("Critical Memory Pressure")
             } footer: {
                 Text(
-                    "All alerts are off by default except critical pressure and runaway processes. \(AppInfo.displayName) never sends anything off your Mac."
+                    "By default, only critical pressure and process memory growth alerts are enabled. All analysis stays on your Mac."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
 
             Section {
-                Toggle("Runaway process", isOn: $alertSettings.config.leakEnabled)
+                Toggle("Process memory growth", isOn: $alertSettings.config.leakEnabled)
                 caption(
-                    "Notify when a process keeps growing in a way that looks like a memory leak.")
+                    "Watch sustained memory growth quietly. Notify for material, continuing growth or rapid runaway use, not a brief rise or a settled cache."
+                )
             } header: {
-                Text("Runaway Process")
+                Text("Process Memory Growth")
             }
 
             Section {
@@ -324,15 +325,23 @@ private struct AlertsSettingsView: View {
             }
 
             Section {
-                Toggle("Heavy swap use", isOn: $alertSettings.config.swapEnabled)
-                if alertSettings.config.swapEnabled {
-                    gigabyteStepper(
-                        "Swap above", bytes: $alertSettings.config.swapThresholdBytes, range: 1...32
-                    )
-                }
-                caption("Notify when the system writes more than the chosen amount to swap.")
+                Toggle("Swap growth and paging", isOn: $alertSettings.config.swapEnabled)
+                caption(
+                    "Notify for sustained swap growth or heavy swap activity under memory pressure. Stable swap usage alone does not trigger an alert."
+                )
             } header: {
-                Text("Heavy Swap Use")
+                Text("Swap Growth And Paging")
+            }
+
+            Section {
+                Toggle(
+                    "Observe growth without notifications",
+                    isOn: $alertSettings.config.observeGrowthOnly)
+                caption(
+                    "Keep swap and process growth in Observations while evaluating the rules. Critical pressure and explicit resource budgets keep their own settings."
+                )
+            } header: {
+                Text("Quiet Evaluation")
             }
 
             Section {
@@ -443,7 +452,7 @@ private struct AdvancedSettingsView: View {
             Section {
                 Toggle("Track per-app network usage", isOn: $trackPerAppNetwork)
                 caption(
-                    "Attribute network traffic to individual apps, so the Analytics tab and the network menu can show which apps are using the network. It samples the system's \u{201C}nettop\u{201D} tool briefly each refresh; the overall download and upload rates are always shown regardless."
+                    "Attribute network traffic to individual apps, so Explorer and the network menu can show which apps are using the network. It samples the system's nettop tool briefly each refresh; the overall download and upload rates are always shown regardless."
                 )
                 LabeledContent("Latency ping host") {
                     TextField(LatencyMonitor.defaultHost, text: $latencyHost)

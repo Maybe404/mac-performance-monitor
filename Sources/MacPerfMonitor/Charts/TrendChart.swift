@@ -20,6 +20,7 @@ struct TrendSeries: Equatable {
     /// utilisation and rates, the maximum for temperatures and fan speeds
     /// (docs/chart-rules.md, rule 2).
     var reduction: TrendSurfaceSeries.Reduction = .mean
+    var name: String? = nil
 }
 
 /// A dashed horizontal threshold line with a small leading label (e.g. "Busy").
@@ -185,23 +186,30 @@ struct TrendChart: View {
     }
 
     /// The point of any series nearest the scrubbed time.
-    private func nearestPoint(fraction: CGFloat, tMin: Double, span: Double) -> TrendScrubPoint? {
+    func nearestPoint(fraction: CGFloat, tMin: Double, span: Double) -> TrendScrubPoint? {
         let target = tMin + Double(fraction) * span
         var best: TrendPoint?
+        var color = Color.accentColor
         var bestDistance = Double.greatestFiniteMagnitude
         for s in series {
-            for p in s.points {
+            for p in s.points where p.value.isFinite {
                 let distance = abs(p.date.timeIntervalSinceReferenceDate - target)
                 if distance < bestDistance {
                     bestDistance = distance
                     best = p
+                    color = s.color
                 }
             }
         }
         guard let best else { return nil }
+        let readings = series.compactMap { series -> TrendScrubReading? in
+            guard let name = series.name else { return nil }
+            let reading = series.points.first { $0.date == best.date && $0.value.isFinite }
+            return TrendScrubReading(name: name, value: reading?.value, color: series.color)
+        }
         return TrendScrubPoint(
             fraction: CGFloat((best.date.timeIntervalSinceReferenceDate - tMin) / span),
-            date: best.date, value: best.value)
+            date: best.date, value: best.value, color: color, readings: readings)
     }
 
     // MARK: - Time axis ticks
@@ -404,6 +412,14 @@ struct TrendScrubPoint: Equatable {
     var fraction: CGFloat
     var date: Date
     var value: Double
+    var color: Color = .accentColor
+    var readings: [TrendScrubReading] = []
+}
+
+struct TrendScrubReading: Equatable {
+    var name: String
+    var value: Double?
+    var color: Color
 }
 
 /// Y gridlines, their labels, the dashed threshold rules, the optional border,
@@ -550,12 +566,18 @@ private struct TrendLiveLayer: View {
                 rule.addLine(to: CGPoint(x: xx, y: plot.maxY))
                 ctx.stroke(rule, with: .color(.secondary.opacity(0.35)), lineWidth: 1)
                 let r: CGFloat = 3
-                let color = series.first?.color ?? .accentColor
-                ctx.fill(
-                    Path(
-                        ellipseIn: CGRect(
-                            x: xx - r, y: y(scrub.value) - r, width: 2 * r, height: 2 * r)),
-                    with: .color(color))
+                let readings =
+                    scrub.readings.isEmpty
+                    ? [TrendScrubReading(name: "", value: scrub.value, color: scrub.color)]
+                    : scrub.readings
+                for reading in readings {
+                    guard let value = reading.value else { continue }
+                    ctx.fill(
+                        Path(
+                            ellipseIn: CGRect(
+                                x: xx - r, y: y(value) - r, width: 2 * r, height: 2 * r)),
+                        with: .color(reading.color))
+                }
             }
         }
     }
@@ -612,11 +634,15 @@ private struct TrendScrubOverlay: View {
                     )
                 if let point {
                     let xx = plot.minX + point.fraction * plot.width
+                    let width = min(plot.width, point.readings.isEmpty ? 160 : 230)
+                    let height = 18 + CGFloat(max(1, point.readings.count)) * 18
                     readout(point)
-                        .fixedSize()
+                        .frame(width: width, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                         .allowsHitTesting(false)
                         .position(
-                            x: min(max(xx, plot.minX + 44), plot.maxX - 44), y: plot.minY + 16)
+                            x: min(max(xx, plot.minX + width / 2), plot.maxX - width / 2),
+                            y: plot.minY + height / 2 + 2)
                 }
             }
         }
@@ -628,12 +654,25 @@ private struct TrendScrubOverlay: View {
 
     private func readout(_ point: TrendScrubPoint) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(point.date, format: .dateTime.hour().minute().second())
+            Text(point.date, format: .dateTime.month(.abbreviated).day().hour().minute().second())
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            Text(yFormat(point.value))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
+            if point.readings.isEmpty {
+                Text(yFormat(point.value))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+            } else {
+                ForEach(Array(point.readings.enumerated()), id: \.offset) { _, reading in
+                    HStack(spacing: 5) {
+                        Circle().fill(reading.color).frame(width: 6, height: 6)
+                        Text(reading.name)
+                        Spacer(minLength: 8)
+                        Text(reading.value.map(yFormat) ?? t("Unavailable"))
+                            .monospacedDigit()
+                    }
+                    .font(.caption)
+                }
+            }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)

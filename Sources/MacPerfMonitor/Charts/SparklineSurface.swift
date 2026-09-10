@@ -40,7 +40,10 @@ final class MetricCardFeed {
     func publish(
         value: String?, tint: NSColor, column: LiveColumn?, scale: Double = 1,
         xDomain: ClosedRange<Date>?, yDomain: ClosedRange<Double>?, peak: String? = nil,
-        reduction: TrendSurfaceSeries.Reduction = .mean, companions: [MetricCardCompanion] = []
+        reduction: TrendSurfaceSeries.Reduction = .mean, companions: [MetricCardCompanion] = [],
+        statisticsInterval: TimeInterval? = nil, gapThreshold: TimeInterval? = nil,
+        name: String = "", format: ((Double) -> String)? = nil, statisticsNote: String? = nil,
+        replacingHistory: Bool = false
     ) {
         self.value = value
         self.peak = peak
@@ -63,14 +66,20 @@ final class MetricCardFeed {
             model.series.append(
                 TrendSurfaceSeries(
                     column: column, scale: scale, color: Color(nsColor: tint), lineWidth: 1.5,
-                    reduction: reduction))
+                    reduction: reduction, name: name))
         }
         model.xDomain = xDomain
         model.yDomain = yDomain
-        model.gapThreshold = xDomain.map {
-            max($0.upperBound.timeIntervalSince($0.lowerBound) / 24, 30)
-        }
-        trend.publish(model)
+        model.gapThreshold =
+            gapThreshold
+            ?? xDomain.map {
+                max($0.upperBound.timeIntervalSince($0.lowerBound) / 24, 30)
+            }
+        model.statisticsInterval = statisticsInterval
+        model.statisticsNote = statisticsNote
+        if let format { model.yFormat = format }
+        model.accessibilityLabel = name.isEmpty ? "Trend" : name
+        trend.publish(model, replacingHistory: replacingHistory)
         for observer in observers.values { observer() }
     }
 
@@ -112,15 +121,21 @@ final class MetricCardFeed {
 struct LiveSparkline: NSViewRepresentable {
     let feed: MetricCardFeed
     var lineWidth: CGFloat = 1.5
+    var scrubbable = false
+    var onActivate: (() -> Void)?
 
     func makeNSView(context: Context) -> TrendSurfaceView {
         let view = TrendSurfaceView()
         view.setAccessibilityElement(false)
+        view.scrubbable = scrubbable || feed.trend.model.statisticsInterval != nil
+        view.onActivate = onActivate
         view.attach(feed.trend)
         return view
     }
 
     func updateNSView(_ view: TrendSurfaceView, context: Context) {
+        view.scrubbable = scrubbable || feed.trend.model.statisticsInterval != nil
+        view.onActivate = onActivate
         if view.feed !== feed.trend { view.attach(feed.trend) }
     }
 

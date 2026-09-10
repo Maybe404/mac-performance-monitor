@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Every chart and card on a live page reads one or two metrics from every
 /// sample in the window, several times a tick. Held as an array of
-/// `SystemHistoryPoint` that meant copying a 200-byte struct (with resilient
+/// `SystemHistoryPoint` that meant copying a large struct (with resilient
 /// `Date` and optional fields, so not a plain memcpy) per metric per sample per
 /// tick, which profiled as the dominant cost once the window held an hour of
 /// 4 Hz samples. Here each metric is a contiguous `[Double]` and timestamps are
@@ -57,11 +57,37 @@ public struct SystemHistoryWindow {
         case loadAverage5
         case loadAverage15
         case loadAverage1Peak
+        /// Raw sample counts and source bucket widths, not chart bucket sizes.
+        case sampleCount
+        case bucketDuration
+        /// True bucket minima. Unknown legacy extrema are NaN, never a mean
+        /// substituted for a discarded minimum. Raw extrema equal the value.
+        case pressurePercentMinimum
+        case cpuLoadMinimum
+        case networkInMinimum
+        case networkOutMinimum
+        case diskReadMinimum
+        case diskWriteMinimum
+        case appMemoryMinimum
+        case appMemoryPeak
+        case wiredMinimum
+        case wiredPeak
+        case compressedMinimum
+        case compressedPeak
+        case cachedFilesMinimum
+        case cachedFilesPeak
+        case swapUsedMinimum
+        case swapUsedPeak
     }
 
     /// Timestamps as `timeIntervalSinceReferenceDate`, oldest first.
     private var times: [Double] = []
     private var columns: [[Double]] = Array(repeating: [], count: Column.allCases.count)
+    /// Lossless snapshots for the occasional points() export. These are copied
+    /// once on append, not scanned per metric on the chart hot path. Keeping
+    /// the originals also preserves optional fields and exact UInt64 values
+    /// that cannot all be reconstructed from the chart's Double columns.
+    private var retainedPoints: [SystemHistoryPoint] = []
     private var head = 0
     public private(set) var span: TimeInterval
     /// The newest sample in full, for the live read-outs.
@@ -105,10 +131,12 @@ public struct SystemHistoryWindow {
         }
         times.removeAll(keepingCapacity: true)
         for i in columns.indices { columns[i].removeAll(keepingCapacity: true) }
+        retainedPoints.removeAll(keepingCapacity: true)
         head = 0
         latest = nil
         times.reserveCapacity(points.count)
         for i in columns.indices { columns[i].reserveCapacity(points.count) }
+        retainedPoints.reserveCapacity(points.count)
         for point in points { push(point) }
         trim()
     }
@@ -134,37 +162,25 @@ public struct SystemHistoryWindow {
     /// The window as points, oldest first. Allocates; for occasional use only
     /// (the charts read the columns directly).
     public func points() -> [SystemHistoryPoint] {
-        var out: [SystemHistoryPoint] = []
-        out.reserveCapacity(count)
-        for i in head..<times.count {
-            out.append(
-                SystemHistoryPoint(
-                    date: Date(timeIntervalSinceReferenceDate: times[i]),
-                    pressurePercent: columns[Column.pressurePercent.rawValue][i],
-                    appMemory: UInt64(columns[Column.appMemory.rawValue][i]),
-                    wired: UInt64(columns[Column.wired.rawValue][i]),
-                    compressed: UInt64(columns[Column.compressed.rawValue][i]),
-                    cachedFiles: UInt64(columns[Column.cachedFiles.rawValue][i]),
-                    swapUsed: UInt64(columns[Column.swapUsed.rawValue][i]),
-                    cpuLoad: columns[Column.cpuLoad.rawValue][i],
-                    loadAverage1: columns[Column.loadAverage1.rawValue][i],
-                    loadAverage5: columns[Column.loadAverage5.rawValue][i],
-                    loadAverage15: columns[Column.loadAverage15.rawValue][i],
-                    networkInBytesPerSec: columns[Column.networkInBytesPerSec.rawValue][i],
-                    networkOutBytesPerSec: columns[Column.networkOutBytesPerSec.rawValue][i],
-                    diskReadBytesPerSec: columns[Column.diskReadBytesPerSec.rawValue][i],
-                    diskWriteBytesPerSec: columns[Column.diskWriteBytesPerSec.rawValue][i]))
-        }
-        return out
+        Array(retainedPoints[head...])
     }
 
-    /// The largest value in a column, or nil when the window is empty.
+    /// The largest value in a column, or nil when the window is empty or any
+    /// retained value is unknown. A partial peak must not claim a full range.
     public func peak(_ column: Column) -> Double? {
-        values(column).max()
+        let values = values(column)
+        guard !values.isEmpty else { return nil }
+        var maximum = -Double.infinity
+        for value in values {
+            guard value.isFinite else { return nil }
+            maximum = max(maximum, value)
+        }
+        return maximum
     }
 
     private mutating func push(_ point: SystemHistoryPoint) {
         times.append(point.date.timeIntervalSinceReferenceDate)
+        retainedPoints.append(point)
         columns[Column.pressurePercent.rawValue].append(point.pressurePercent)
         columns[Column.cpuLoad.rawValue].append(point.cpuLoad)
         columns[Column.appMemory.rawValue].append(Double(point.appMemory))
@@ -194,6 +210,29 @@ public struct SystemHistoryWindow {
         columns[Column.loadAverage15.rawValue].append(point.loadAverage15)
         columns[Column.loadAverage1Peak.rawValue].append(
             peaks.loadAverage1 ?? point.loadAverage1)
+        columns[Column.sampleCount.rawValue].append(Double(point.sampleCount))
+        columns[Column.bucketDuration.rawValue].append(point.bucketDuration)
+        // Older callers mark aggregates with peaks but have no bucket width.
+        // Do not mistake those points for raw samples and invent their minima.
+        let isRaw = point.bucketDuration == 0 && point.sampleCount == 1 && point.peaks == nil
+        let minima = point.minima ?? (isRaw ? peaks : nil)
+        let memoryPeaks = point.peaks ?? (isRaw ? peaks : nil)
+        columns[Column.pressurePercentMinimum.rawValue].append(minima?.pressurePercent ?? .nan)
+        columns[Column.cpuLoadMinimum.rawValue].append(minima?.cpuLoad ?? .nan)
+        columns[Column.networkInMinimum.rawValue].append(minima?.networkInBytesPerSec ?? .nan)
+        columns[Column.networkOutMinimum.rawValue].append(minima?.networkOutBytesPerSec ?? .nan)
+        columns[Column.diskReadMinimum.rawValue].append(minima?.diskReadBytesPerSec ?? .nan)
+        columns[Column.diskWriteMinimum.rawValue].append(minima?.diskWriteBytesPerSec ?? .nan)
+        columns[Column.appMemoryMinimum.rawValue].append(minima?.appMemory ?? .nan)
+        columns[Column.appMemoryPeak.rawValue].append(memoryPeaks?.appMemory ?? .nan)
+        columns[Column.wiredMinimum.rawValue].append(minima?.wired ?? .nan)
+        columns[Column.wiredPeak.rawValue].append(memoryPeaks?.wired ?? .nan)
+        columns[Column.compressedMinimum.rawValue].append(minima?.compressed ?? .nan)
+        columns[Column.compressedPeak.rawValue].append(memoryPeaks?.compressed ?? .nan)
+        columns[Column.cachedFilesMinimum.rawValue].append(minima?.cachedFiles ?? .nan)
+        columns[Column.cachedFilesPeak.rawValue].append(memoryPeaks?.cachedFiles ?? .nan)
+        columns[Column.swapUsedMinimum.rawValue].append(minima?.swapUsed ?? .nan)
+        columns[Column.swapUsedPeak.rawValue].append(memoryPeaks?.swapUsed ?? .nan)
         latest = point
     }
 
@@ -206,6 +245,7 @@ public struct SystemHistoryWindow {
         if head >= Self.compactionThreshold, head >= times.count / 2 {
             times.removeFirst(head)
             for i in columns.indices { columns[i].removeFirst(head) }
+            retainedPoints.removeFirst(head)
             head = 0
         }
     }

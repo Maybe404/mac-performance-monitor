@@ -36,6 +36,61 @@ struct TemperatureChart: View {
     var xDomain: ClosedRange<Date>? = nil
     var showsTimeAxis = false
 
+    static func statisticsModel(
+        points: [SystemHistoryPoint], xDomain: ClosedRange<Date>?
+    ) -> TrendModel {
+        func column(
+            reading: (SystemHistoryPoint) -> Double?, average: (SystemHistoryPoint) -> Double?,
+            minimum: (SystemHistoryPoint) -> Double?, count: (SystemHistoryPoint) -> Int?
+        ) -> LiveColumn {
+            LiveColumn(
+                times: points.map { $0.date.timeIntervalSinceReferenceDate }[...],
+                values: points.map { point in
+                    (point.bucketDuration > 0 ? average(point) : reading(point)) ?? .nan
+                }[...],
+                highs: points.map { reading($0) ?? .nan }[...],
+                lows: points.map { point in
+                    (point.bucketDuration > 0 ? minimum(point) : reading(point)) ?? .nan
+                }[...],
+                weights: points.map { point in
+                    if point.bucketDuration == 0 { return reading(point) == nil ? 0 : 1 }
+                    return count(point).map(Double.init) ?? .nan
+                }[...],
+                durations: points.map(\.bucketDuration)[...])
+        }
+        let cpu = column(
+            reading: { $0.cpuDieC }, average: { $0.cpuDieAverageC },
+            minimum: { $0.minima?.cpuDieC }, count: { $0.cpuDieSampleCount })
+        let gpu = column(
+            reading: { $0.gpuDieC }, average: { $0.gpuDieAverageC },
+            minimum: { $0.minima?.gpuDieC }, count: { $0.gpuDieSampleCount })
+        var model = TrendModel()
+        model.series = [
+            TrendSurfaceSeries(column: cpu, color: ThermalStyle.cpu, name: t("CPU die")),
+            TrendSurfaceSeries(column: gpu, color: ThermalStyle.gpu, name: t("GPU die")),
+        ]
+        model.xDomain = xDomain
+        let source = points.map(\.bucketDuration).max() ?? 0
+        let span = xDomain.map { $0.upperBound.timeIntervalSince($0.lowerBound) } ?? 300
+        model.statisticsInterval = ChartStatistics.interval(span: span, minimum: source)
+        model.gapThreshold = ChartGap.threshold(
+            expectedSpacing: max(5, SamplerModel.configuredHighResInterval()))
+        let bounds = [cpu, gpu].flatMap { column in
+            Array(column.values) + Array(column.highs ?? []) + Array(column.lows ?? [])
+        }.filter(\.isFinite)
+        if let low = bounds.min(), let high = bounds.max() {
+            model.yDomain = ChartDomain.fitted(
+                min: low, max: high, minimumSpan: 30, padding: 5, floor: 0)
+        } else {
+            model.yDomain = 20...100
+        }
+        model.yFormat = { String(format: "%.1f°C", $0) }
+        model.accessibilityLabel = "CPU and GPU die temperatures"
+        model.accessibilityValue =
+            "Average and observed temperature range. Missing sensor readings remain gaps."
+        return model
+    }
+
     private var cpuPoints: [TrendPoint] {
         points.compactMap { p in p.cpuDieC.map { TrendPoint(date: p.date, value: $0) } }
     }
@@ -70,22 +125,29 @@ struct TemperatureChart: View {
     }
 
     var body: some View {
+        chart
+            .accessibilityLabel("Die temperature trend")
+            .accessibilityValue(accessibilitySummary)
+    }
+
+    var chart: TrendChart {
         TrendChart(
             series: [
-                TrendSeries(points: cpuPoints, color: ThermalStyle.cpu, reduction: .maximum),
+                TrendSeries(
+                    points: cpuPoints, color: ThermalStyle.cpu, reduction: .maximum,
+                    name: t("CPU die")),
                 TrendSeries(
                     points: gpuPoints, color: ThermalStyle.gpu, lineWidth: 1.8,
-                    reduction: .maximum),
+                    reduction: .maximum, name: t("GPU die")),
             ],
             xDomain: xDomain,
             yDomain: temperatureDomain,
             yFormat: { String(format: "%.0f°C", $0) },
             showsTimeAxis: showsTimeAxis,
             gapThreshold: ChartGap.threshold(
-                expectedSpacing: max(pointSpacing, SamplerModel.configuredHighResInterval()))
+                expectedSpacing: max(pointSpacing, SamplerModel.configuredHighResInterval())),
+            scrubbable: true
         )
-        .accessibilityLabel("Die temperature trend")
-        .accessibilityValue(accessibilitySummary)
     }
 
     /// Fit the readings rather than pinning the axis to a fixed 20 degrees and a
@@ -122,6 +184,12 @@ struct FanChart: View {
     }
 
     var body: some View {
+        chart
+            .accessibilityLabel("Fan speed trend")
+            .accessibilityValue(accessibilitySummary)
+    }
+
+    var chart: TrendChart {
         TrendChart(
             series: [
                 TrendSeries(points: fanPoints, color: ThermalStyle.fan, reduction: .maximum)
@@ -129,9 +197,8 @@ struct FanChart: View {
             xDomain: xDomain,
             yFormat: { t("%@ rpm", String(format: "%.0f", max($0, 0))) },
             showsTimeAxis: showsTimeAxis,
+            scrubbable: true,
             leftGutter: 56
         )
-        .accessibilityLabel("Fan speed trend")
-        .accessibilityValue(accessibilitySummary)
     }
 }

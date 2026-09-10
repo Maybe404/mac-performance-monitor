@@ -28,6 +28,12 @@ struct BatteryChart: View {
     }
 
     var body: some View {
+        chart
+            .accessibilityLabel("Battery charge timeline")
+            .accessibilityValue(accessibilitySummary)
+    }
+
+    var chart: TrendChart {
         TrendChart(
             series: [
                 TrendSeries(points: chargePoints, color: currentLevel.color, filled: true)
@@ -35,13 +41,13 @@ struct BatteryChart: View {
             xDomain: xDomain,
             yDomain: 0...100,
             yTicks: [0, 20, 50, 80, 100],
+            yFormat: { String(format: "%.0f%%", $0) },
             rules: [
                 TrendRule(value: 20, label: "Low", color: .red),
                 TrendRule(value: 80, label: "80%", color: .green),
             ],
-            showsTimeAxis: true
+            showsTimeAxis: true,
+            scrubbable: true
         )
-        .accessibilityLabel("Battery charge timeline")
-        .accessibilityValue(accessibilitySummary)
     }
 }

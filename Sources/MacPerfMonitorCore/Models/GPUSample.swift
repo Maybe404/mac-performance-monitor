@@ -17,6 +17,7 @@ public struct GPUPerformanceState: Sendable, Codable, Equatable {
 /// On Apple silicon the integrated GPU is a single accelerator backed by unified
 /// memory; the figures come straight from the driver's `PerformanceStatistics`.
 public struct GPUSample: Sendable, Codable, Equatable {
+    public var sampledAt: Date? = nil
     /// Overall GPU utilization, 0–100 (IOAccelerator "Device Utilization %").
     public var utilization: Double
     /// Renderer / tiler utilization, 0–100, when the driver reports them.

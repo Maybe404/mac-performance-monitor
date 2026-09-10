@@ -20,6 +20,14 @@ public struct SystemSample: Sendable, Codable {
 
     public var swapTotal: UInt64
     public var swapUsed: UInt64
+    public var swapSampleValid: Bool?
+    public var pressureSampleValid: Bool?
+    public var swapInBytesPerSecond: Double?
+    public var swapOutBytesPerSecond: Double?
+    public var swapInPagesDelta: UInt64?
+    public var swapOutPagesDelta: UInt64?
+    public var memoryPageSize: UInt64?
+    public var memorySampleInterval: TimeInterval?
 
     public var pressureLevel: PressureLevel
     /// Continuous 0...100 index for smooth charting. See docs/pressure-index.md.
@@ -185,7 +193,15 @@ public struct SystemSample: Sendable, Codable {
         skinC: Double? = nil,
         wirelessC: Double? = nil,
         voltageRailC: Double? = nil,
-        otherSensorC: Double? = nil
+        otherSensorC: Double? = nil,
+        swapSampleValid: Bool? = nil,
+        pressureSampleValid: Bool? = nil,
+        swapInBytesPerSecond: Double? = nil,
+        swapOutBytesPerSecond: Double? = nil,
+        swapInPagesDelta: UInt64? = nil,
+        swapOutPagesDelta: UInt64? = nil,
+        memoryPageSize: UInt64? = nil,
+        memorySampleInterval: TimeInterval? = nil
     ) {
         self.timestamp = timestamp
         self.totalRAM = totalRAM
@@ -199,6 +215,14 @@ public struct SystemSample: Sendable, Codable {
         self.cachedFiles = cachedFiles
         self.swapTotal = swapTotal
         self.swapUsed = swapUsed
+        self.swapSampleValid = swapSampleValid
+        self.pressureSampleValid = pressureSampleValid
+        self.swapInBytesPerSecond = swapInBytesPerSecond
+        self.swapOutBytesPerSecond = swapOutBytesPerSecond
+        self.swapInPagesDelta = swapInPagesDelta
+        self.swapOutPagesDelta = swapOutPagesDelta
+        self.memoryPageSize = memoryPageSize
+        self.memorySampleInterval = memorySampleInterval
         self.pressureLevel = pressureLevel
         self.pressurePercent = pressurePercent
         self.pageIns = pageIns

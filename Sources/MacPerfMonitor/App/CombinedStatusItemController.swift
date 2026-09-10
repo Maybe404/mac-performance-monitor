@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import MacPerfMonitorCore
 import SwiftUI
 
 @MainActor
@@ -42,8 +43,8 @@ final class CombinedStatusItemController: NSObject {
     /// Whether the open popover is showing the GPU panel, which is registered
     /// as a live GPU surface so the device is read every tick while it shows.
     private var gpuPanelLive = false
-    private var currentPanel: MenuBarMetric
-    private lazy var panelSelection = CombinedMenuBarPanelSelection(metric: currentPanel)
+    private var currentPanel: CombinedMenuBarPanel
+    private lazy var panelSelection = CombinedMenuBarPanelSelection(panel: currentPanel)
 
     private lazy var menuClock = MenuClock(
         source: model.liveTick.eraseToAnyPublisher(),
@@ -64,9 +65,9 @@ final class CombinedStatusItemController: NSObject {
         self.languageManager = languageManager
         self.configuration = configuration
         self.notchDisplay = notchDisplay
-        currentPanel =
+        currentPanel = .metric(
             UserDefaults.standard.string(forKey: Self.panelDefaultsKey)
-            .flatMap(MenuBarMetric.init(rawValue:)) ?? configuration.focusedMetric
+                .flatMap(MenuBarMetric.init(rawValue:)) ?? configuration.focusedMetric)
         super.init()
     }
 
@@ -77,7 +78,7 @@ final class CombinedStatusItemController: NSObject {
                 self?.reconcileMenuClock()
             }
             .store(in: &cancellables)
-        model.$activeAlertKinds
+        model.$activeAlerts
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refreshImage() }
             .store(in: &cancellables)
@@ -156,7 +157,7 @@ final class CombinedStatusItemController: NSObject {
             configuration.presentation == .focus
             ? [configuration.focusedMetric] : configuration.selectedMetrics
         let readouts = CombinedMenuBarReadouts.current(for: metrics, model: model)
-        let alarmCount = model.activeAlertKinds.count
+        let alarmCount = model.activeAlerts.count
         let signature =
             "\(configuration.presentation.rawValue)|\(alarmCount)|"
             + readouts.map {
@@ -171,7 +172,7 @@ final class CombinedStatusItemController: NSObject {
             [$0.metric.title, $0.value, $0.secondaryValue].compactMap { $0 }.joined(separator: " ")
         }.joined(separator: ", ")
         let alarmSuffix =
-            alarmCount > 0 ? ", \(alarmCount) active alarm\(alarmCount == 1 ? "" : "s")" : ""
+            alarmCount > 0 ? ", " + t("Active alerts: %@", alarmCount.formatted()) : ""
         button.toolTip = summary + alarmSuffix
         button.setAccessibilityLabel("\(AppInfo.displayName), \(summary)\(alarmSuffix)")
         shownSignature = signature
@@ -199,20 +200,20 @@ final class CombinedStatusItemController: NSObject {
 
     @objc private func togglePopover(_ sender: Any?) {
         guard let button = statusItem?.button else { return }
-        let metric = clickedMetric(in: button)
+        let panel = clickedPanel(in: button)
         if let popover, popover.isShown {
-            if let metric, metric != currentPanel {
-                panelSelection.metric = metric
-                selectPanel(metric)
+            if let panel, panel != currentPanel {
+                panelSelection.panel = panel
+                selectPanel(panel)
                 popover.contentViewController?.view.window?.makeKey()
                 return
             }
             popover.performClose(sender)
             return
         }
-        if let metric {
-            panelSelection.metric = metric
-            selectPanel(metric)
+        if let panel {
+            panelSelection.panel = panel
+            selectPanel(panel)
         }
         let popover = popover ?? makePopover()
         self.popover = popover
@@ -227,7 +228,7 @@ final class CombinedStatusItemController: NSObject {
         let content = LocaleRootView(languageManager: languageManager) {
             CombinedMenuBarContentView(
                 selection: self.panelSelection,
-                selectionChanged: { [weak self] metric in self?.selectPanel(metric) },
+                selectionChanged: { [weak self] panel in self?.selectPanel(panel) },
                 dismiss: { [weak popover] in popover?.performClose(nil) }
             )
             .environmentObject(self.model)
@@ -246,7 +247,7 @@ final class CombinedStatusItemController: NSObject {
         return popover
     }
 
-    private func clickedMetric(in button: NSStatusBarButton) -> MenuBarMetric? {
+    private func clickedPanel(in button: NSStatusBarButton) -> CombinedMenuBarPanel? {
         let metrics =
             configuration.presentation == .focus
             ? [configuration.focusedMetric] : configuration.selectedMetrics
@@ -262,7 +263,7 @@ final class CombinedStatusItemController: NSObject {
             let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
             local = button.convert(windowPoint, from: nil)
         } else {
-            return configuration.presentation == .focus ? metrics[0] : nil
+            return configuration.presentation == .focus ? .metric(metrics[0]) : nil
         }
 
         let imageRect =
@@ -271,23 +272,39 @@ final class CombinedStatusItemController: NSObject {
                 x: (button.bounds.width - (button.image?.size.width ?? 0)) / 2,
                 y: 0, width: button.image?.size.width ?? button.bounds.width,
                 height: button.bounds.height)
-        if model.activeAlertKinds.count > 0, local.x > imageRect.maxX {
-            return readouts.first(where: \.isAlarm)?.metric
-        }
-        let imageX = min(max(local.x - imageRect.minX, 0), imageRect.width)
-        return CombinedMenuBarImage.metric(
-            at: imageX, readouts: readouts, presentation: configuration.presentation)
+        let alertRect =
+            model.activeAlerts.isEmpty
+            ? nil
+            : (button.cell as? NSButtonCell)?.titleRect(forBounds: button.bounds)
+        return Self.panel(
+            at: local, imageRect: imageRect, alertRect: alertRect,
+            readouts: readouts, presentation: configuration.presentation)
     }
 
-    private func selectPanel(_ metric: MenuBarMetric) {
-        guard metric != currentPanel else {
+    static func panel(
+        at point: NSPoint, imageRect: NSRect, alertRect: NSRect?,
+        readouts: [CombinedMenuBarReadout], presentation: MenuBarPresentation
+    ) -> CombinedMenuBarPanel? {
+        if let alertRect, alertRect.contains(point) { return .alerts }
+        let imageX = min(max(point.x - imageRect.minX, 0), imageRect.width)
+        return CombinedMenuBarImage.metric(
+            at: imageX, readouts: readouts, presentation: presentation
+        ).map {
+            .metric($0)
+        }
+    }
+
+    private func selectPanel(_ panel: CombinedMenuBarPanel) {
+        guard panel != currentPanel else {
             reconcileGPUSampling()
             return
         }
-        currentPanel = metric
-        UserDefaults.standard.set(metric.rawValue, forKey: Self.panelDefaultsKey)
+        currentPanel = panel
+        if case .metric(let metric) = panel {
+            UserDefaults.standard.set(metric.rawValue, forKey: Self.panelDefaultsKey)
+        }
         if popover?.isShown == true {
-            replaceActiveConsumer(with: consumerKind(for: metric))
+            replaceActiveConsumer(with: consumerKind(for: panel))
             model.requestImmediateTick()
         }
         reconcileGPUSampling()
@@ -308,15 +325,15 @@ final class CombinedStatusItemController: NSObject {
         if let kind { model.addPopoverProcessConsumer(kind) }
     }
 
-    private func consumerKind(for metric: MenuBarMetric) -> MenuListKind? {
-        switch metric {
-        case .pressure: return .footprint
-        case .cpu: return .cpu
-        case .energy: return .energy
-        case .network: return .network
-        case .disk: return .disk
-        case .gpu: return .gpu
-        case .temperature: return nil
+    private func consumerKind(for panel: CombinedMenuBarPanel) -> MenuListKind? {
+        switch panel {
+        case .alerts, .metric(.pressure): return .footprint
+        case .metric(.cpu): return .cpu
+        case .metric(.energy): return .energy
+        case .metric(.network): return .network
+        case .metric(.disk): return .disk
+        case .metric(.gpu): return .gpu
+        case .metric(.temperature): return nil
         }
     }
 
@@ -324,7 +341,8 @@ final class CombinedStatusItemController: NSObject {
         // Temperature rides the GPU/SMC read path, so a visible temperature
         // readout or panel keeps that path live exactly like the GPU ones.
         let panelLive =
-            popover?.isShown == true && (currentPanel == .gpu || currentPanel == .temperature)
+            popover?.isShown == true
+            && (currentPanel == .metric(.gpu) || currentPanel == .metric(.temperature))
         if panelLive != gpuPanelLive {
             gpuPanelLive = panelLive
             if panelLive { model.addGPUConsumer() } else { model.removeGPUConsumer() }

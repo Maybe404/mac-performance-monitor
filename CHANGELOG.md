@@ -8,6 +8,24 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ### Changed
 
+- **Alerts now track growth and worsening conditions.** Stable swap usage no
+  longer triggers a warning just for crossing a fixed number. Growth and paging
+  rules use fresh evidence, confirmation, and recovery windows. Further growth
+  can trigger an escalation without first dropping below the old threshold.
+  Modest process growth stays quiet; plateaus and stale samples no longer count
+  as ongoing growth. Related memory alerts share a notice, and only critical
+  notices request sound. The menu separates observations from active alerts,
+  offers a one-hour snooze, and opens alert evidence in Explorer. Local incident
+  state survives restarts. See [Adaptive alerts](docs/adaptive-alerts.md) for the
+  rules, settings changes, and verification limits.
+- **Analytics becomes Explorer.** The new start screen brings machine, process,
+  and sensor charts into one workspace with a shared cursor and time window.
+  Pin an instant, jump to an exact time, compare up to eight running or exited
+  processes, and inspect recorded values, source intervals, and the full machine
+  row. Choose charts from searchable groups, switch between a grid and a list,
+  or focus one chart. CSV exports the visible data; process trace import/export
+  and the previous process monitor remain available. Current hardware inventory
+  is separate from historical evidence. See the [Explorer guide](docs/explorer-design.md).
 - **The app comes first now, and the menu bar item is optional.** Requested in
   #21 and #67. Until now the menu bar read-out was the app: it could not be
   turned off, it was the only thing that could open a window, and it held the
@@ -28,34 +46,23 @@ Notable changes to Mac Performance Monitor. This project follows
   Opening at login stays quiet, with no window and no Dock icon.
 - Closing the last window quits the app when neither the menu bar item nor
   recording is switched on. With either on, it keeps running as before.
-- **Every chart follows one set of rules**, written down in
-  `docs/chart-rules.md` and modelled on beszel. A line carries about 120 points
-  whatever the range, so a five minute view and a seven day view are equally
-  readable, and the reduction to those points happens at draw time so nothing
-  is thrown away on the way in. A volatile metric is drawn as the mean of each
-  point's samples inside a translucent band from their minimum to their
-  maximum, so the plot shows the typical level and the spikes at once instead of
-  a solid block of spikes. Temperatures follow the maximum, because the spike is
-  the event. The line is a monotone curve, the kind beszel draws, which is
-  smooth but cannot overshoot, so every bump on it was measured. On the six
-  hour, day and week ranges the stored rows carry their bucket's peak, so the
-  band still reaches the real spikes there, and those ranges now run right up
-  to the present rather than stopping at the last complete minute or hour.
-  Temperature axes fit the data with a floor on their span, the area fills are
-  gone from the volatile series, the Processes header cards state their peak,
-  and the load average is a chart. The same drawing runs on every chart in the
-  app, not only the Dashboard: the GPU, Energy, Disk and Network tabs, the
-  process and group detail charts, and the battery charge chart, which moves
-  off Swift Charts. Those tabs now load every stored row rather than thinning
-  the history to 360 points before drawing it, and the menu bar panels draw the
-  same curve. The load average card on the Processes tab shows the 1, 5 and 15
-  minute averages together, as beszel does: the 1 minute figure as the line,
-  the slower two as fainter lines behind it, with their values on the card.
-  The load averages are recorded to the history database now (they lived only
-  in memory before, so the card started empty every time the Processes tab was
-  opened), and the detail sheet a card opens is larger and draws the same
-  smoothed line and band as the charts, with the three load lines and a legend
-  where the card has them.
+- **Dashboard charts separate averages from bursts.** Each range uses fixed
+  time intervals for the clear average line, with the unsmoothed recorded range
+  in a translucent layer behind it. Range bars and separate outline traces
+  are gone. Short bursts keep their detail rather than being reduced to the
+  average's intervals.
+  Pressure, processor, network, disk, swap, thermals, and the six headline
+  strips use the same statistics. Resizing keeps the averages fixed and can
+  reveal finer detail in the recorded range.
+  New stored history retains minima and sensor-specific counts as well as
+  peaks. Older missing bounds remain unknown, and thermal averages with
+  unknown counts are marked approximate. The standard and app-wide rollout
+  guide are in [Dashboard chart standard](docs/dashboard-chart-standard.md).
+- Tabs other than Dashboard and Explorer share the existing line-and-band renderer and load every stored
+  row instead of thinning history before drawing. Stored ranges include
+  recent finer-resolution rows up to the present. The Processes load card
+  shows the recorded 1, 5, and 15 minute load averages together, including in
+  its enlarged detail chart.
 
 ### Security
 
@@ -71,6 +78,19 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ### Added
 
+- The new Alerts menu shows all active alerts. Click the red badge to open it.
+  Each process has its own list, with the time each alert began. Click a process
+  name to open its details. Alerts for the whole Mac form a separate group.
+  The badge counts alerts, not alert types.
+- Hover details on the Energy charge, die-temperature, and fan timelines,
+  plus the charge, power, and battery-temperature card charts. Readouts show
+  the date, time, and value in the correct units. Thermal hover identifies
+  CPU and GPU separately and marks a missing sensor reading as unavailable.
+- Hover details on every Dashboard chart, including headline sparklines.
+  Readouts show each series' interval average, known bounds, sample count,
+  source resolution, and missing readings. Every Dashboard card has a detail
+  view with a larger chart or breakdown, captured values, and explanations.
+  Detail views are frozen snapshots so they stay still during investigation.
 - German and French localizations, generated by Claude Fable 5.1, Anthropic's
   AI model, from the English source strings. They have not yet been reviewed
   by native speakers: Settings says so whenever either language is active,
@@ -80,6 +100,25 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ### Fixed
 
+- The network menu now uses fixed columns for interface details, session totals,
+  latency, jitter, and packet loss. Missing readings retain their space, and
+  the app list reserves six rows so traffic changes do not resize the menu.
+- The disk menu no longer jumps as device activity changes. Each physical disk
+  has fixed read/write columns, with throughput and service time on separate
+  rows. Idle readings keep their space, and warning icons show error and retry
+  counts on hover without changing the layout.
+- Fixed a crash during background history maintenance. Process-cache pruning,
+  clearing, and lookups now share the database writer queue with sample inserts.
+  Cleanup after a failed transaction also finishes on that queue before another
+  write can start.
+- Metric card details no longer open as a small, empty grey sheet on the first
+  click. The captured data now controls sheet presentation directly. Closing
+  and reopening the detail view captures a fresh snapshot.
+- GPU thermal sensor discovery no longer drops a valid die sensor for the
+  whole session when its first value is zero or unavailable. Failed reads
+  remain missing; they are not replaced with zero or CPU temperature.
+  Dashboard thermal charts keep these gaps visible and distinguish missing
+  readings from older records whose full range was never stored.
 - **Alerts could be silent.** Alert evaluation runs inside the per-process scan,
   and that scan only ran while recording was on, a window was open, or a menu
   bar panel was up. With recording paused and nothing on screen, no alert was

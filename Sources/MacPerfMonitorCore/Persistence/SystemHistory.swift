@@ -12,9 +12,17 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
     /// points read from the minute and hour tiers, whose value is a mean; nil
     /// for a raw sample, whose peak is itself. The charts draw the mean as the
     /// line and the peak as the top of the band behind it, so a long range still
-    /// shows what the spikes reached rather than a flat average. The tiers do
-    /// not store a minimum, so the band's floor is the mean.
+    /// shows what the spikes reached rather than a flat average. Extrema added
+    /// in v17 stay nil for older buckets that did not record them.
     public var peaks: SystemHistoryPeaks?
+    /// Number of raw system samples represented by the point, not a duration.
+    public var sampleCount: Int = 1
+    /// Width of the source aggregate bucket in seconds; zero for a raw sample.
+    public var bucketDuration: TimeInterval = 0
+    /// Lowest recorded values in the bucket. Nil means the full range is
+    /// unknown, not that its minimum equals its mean. Raw samples need no
+    /// separate extrema because both ends of their range equal the value.
+    public var minima: SystemHistoryPeaks? = nil
 
     public var date: Date
     public var pressurePercent: Double
@@ -63,6 +71,15 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
     // erases exactly the spikes users go looking for.
     public var cpuDieC: Double?
     public var gpuDieC: Double?
+    /// Means of the recorded die readings, separate from the peaks above.
+    /// Legacy aggregates retain their stored means but have unknown weights.
+    public var cpuDieAverageC: Double? = nil
+    public var gpuDieAverageC: Double? = nil
+    /// Valid sensor readings contributing to the corresponding mean. Zero
+    /// means no reading; nil means the count was not recorded, so the mean
+    /// cannot be treated as an exactly weighted aggregate of raw readings.
+    public var cpuDieSampleCount: Int? = nil
+    public var gpuDieSampleCount: Int? = nil
     public var ssdTemperatureC: Double?
     public var fanRPM: Double?
     /// Worst thermal pressure in the interval.
@@ -120,8 +137,18 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
         skinC: Double? = nil,
         wirelessC: Double? = nil,
         voltageRailC: Double? = nil,
-        otherSensorC: Double? = nil
+        otherSensorC: Double? = nil,
+        sampleCount: Int = 1,
+        bucketDuration: TimeInterval = 0,
+        minima: SystemHistoryPeaks? = nil,
+        cpuDieAverageC: Double? = nil,
+        gpuDieAverageC: Double? = nil,
+        cpuDieSampleCount: Int? = nil,
+        gpuDieSampleCount: Int? = nil
     ) {
+        self.sampleCount = sampleCount
+        self.bucketDuration = bucketDuration
+        self.minima = minima
         self.date = date
         self.pressurePercent = pressurePercent
         self.appMemory = appMemory
@@ -153,6 +180,10 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
         self.anePowerWatts = anePowerWatts
         self.cpuDieC = cpuDieC
         self.gpuDieC = gpuDieC
+        self.cpuDieAverageC = cpuDieAverageC
+        self.gpuDieAverageC = gpuDieAverageC
+        self.cpuDieSampleCount = cpuDieSampleCount
+        self.gpuDieSampleCount = gpuDieSampleCount
         self.ssdTemperatureC = ssdTemperatureC
         self.fanRPM = fanRPM
         self.thermalPressure = thermalPressure
@@ -166,8 +197,9 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
     }
 }
 
-/// The per-bucket peaks stored alongside the means in the minute and hour
-/// tiers, for the metrics the Dashboard draws as a line inside a band.
+/// Per-bucket extrema stored alongside the means in the minute and hour
+/// tiers. Used for both `peaks` and `minima`; optional fields distinguish an
+/// unrecorded extremum from a measured zero.
 public struct SystemHistoryPeaks: Sendable, Equatable {
     public var pressurePercent: Double
     public var cpuLoad: Double
@@ -176,15 +208,25 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
     public var diskReadBytesPerSec: Double
     public var diskWriteBytesPerSec: Double
     public var gpuUtilization: Double?
-    /// The 1 minute load average's peak. Nil for tier rows written before it
+    /// The 1 minute load average's extremum. Nil for tier rows written before it
     /// was recorded.
     public var loadAverage1: Double?
+    public var appMemory: Double? = nil
+    public var wired: Double? = nil
+    public var compressed: Double? = nil
+    public var cachedFiles: Double? = nil
+    public var swapUsed: Double? = nil
+    public var cpuDieC: Double? = nil
+    public var gpuDieC: Double? = nil
 
     public init(
         pressurePercent: Double, cpuLoad: Double, networkInBytesPerSec: Double,
         networkOutBytesPerSec: Double, diskReadBytesPerSec: Double,
         diskWriteBytesPerSec: Double, gpuUtilization: Double? = nil,
-        loadAverage1: Double? = nil
+        loadAverage1: Double? = nil,
+        appMemory: Double? = nil, wired: Double? = nil, compressed: Double? = nil,
+        cachedFiles: Double? = nil, swapUsed: Double? = nil,
+        cpuDieC: Double? = nil, gpuDieC: Double? = nil
     ) {
         self.pressurePercent = pressurePercent
         self.cpuLoad = cpuLoad
@@ -194,6 +236,13 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
         self.diskWriteBytesPerSec = diskWriteBytesPerSec
         self.gpuUtilization = gpuUtilization
         self.loadAverage1 = loadAverage1
+        self.appMemory = appMemory
+        self.wired = wired
+        self.compressed = compressed
+        self.cachedFiles = cachedFiles
+        self.swapUsed = swapUsed
+        self.cpuDieC = cpuDieC
+        self.gpuDieC = gpuDieC
     }
 
     /// The peaks of a single raw sample: the sample itself.
@@ -204,12 +253,21 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
             networkOutBytesPerSec: point.networkOutBytesPerSec,
             diskReadBytesPerSec: point.diskReadBytesPerSec,
             diskWriteBytesPerSec: point.diskWriteBytesPerSec,
-            gpuUtilization: point.gpuUtilization, loadAverage1: point.loadAverage1)
+            gpuUtilization: point.gpuUtilization, loadAverage1: point.loadAverage1,
+            appMemory: Double(point.appMemory), wired: Double(point.wired),
+            compressed: Double(point.compressed), cachedFiles: Double(point.cachedFiles),
+            swapUsed: Double(point.swapUsed), cpuDieC: point.cpuDieC, gpuDieC: point.gpuDieC)
     }
 
     /// The element-wise larger of two peaks.
     public func merged(with other: SystemHistoryPeaks) -> SystemHistoryPeaks {
-        SystemHistoryPeaks(
+        // Memory is present on every raw sample. If either bucket omitted its
+        // peak, the other bucket's peak cannot describe the full combined range.
+        func completeMaximum(_ a: Double?, _ b: Double?) -> Double? {
+            guard let a, let b else { return nil }
+            return max(a, b)
+        }
+        return SystemHistoryPeaks(
             pressurePercent: max(pressurePercent, other.pressurePercent),
             cpuLoad: max(cpuLoad, other.cpuLoad),
             networkInBytesPerSec: max(networkInBytesPerSec, other.networkInBytesPerSec),
@@ -217,7 +275,14 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
             diskReadBytesPerSec: max(diskReadBytesPerSec, other.diskReadBytesPerSec),
             diskWriteBytesPerSec: max(diskWriteBytesPerSec, other.diskWriteBytesPerSec),
             gpuUtilization: [gpuUtilization, other.gpuUtilization].compactMap { $0 }.max(),
-            loadAverage1: [loadAverage1, other.loadAverage1].compactMap { $0 }.max())
+            loadAverage1: [loadAverage1, other.loadAverage1].compactMap { $0 }.max(),
+            appMemory: completeMaximum(appMemory, other.appMemory),
+            wired: completeMaximum(wired, other.wired),
+            compressed: completeMaximum(compressed, other.compressed),
+            cachedFiles: completeMaximum(cachedFiles, other.cachedFiles),
+            swapUsed: completeMaximum(swapUsed, other.swapUsed),
+            cpuDieC: [cpuDieC, other.cpuDieC].compactMap { $0 }.max(),
+            gpuDieC: [gpuDieC, other.gpuDieC].compactMap { $0 }.max())
     }
 }
 
@@ -251,19 +316,56 @@ extension SampleStore {
         }
     }
 
-    private func tieredHistory(since: Double, hours: Bool) throws -> [SystemHistoryPoint] {
+    public func systemHistory(
+        from: Date, to: Date, granularity: HistoryWindow.Granularity
+    ) throws -> [SystemHistoryPoint] {
+        guard from <= to else { return [] }
+        let since = from.timeIntervalSince1970
+        let until = to.timeIntervalSince1970
+        switch granularity {
+        case .raw:
+            return try databasePool.read { db in
+                try Self.rawHistory(db, since: since, until: until)
+            }
+        case .minute:
+            let paddedStart = try databasePool.read { db in
+                try Double.fetchOne(
+                    db, sql: "SELECT MAX(bucket) FROM system_minute WHERE bucket < ?",
+                    arguments: [since]) ?? since
+            }
+            return try tieredHistory(since: paddedStart, until: until, hours: false)
+                .filter {
+                    $0.date >= from
+                        || ($0.bucketDuration > 0
+                            && $0.date.addingTimeInterval($0.bucketDuration) > from)
+                }
+        case .hour:
+            return try tieredHistory(since: since - 3600, until: until, hours: true)
+                .filter {
+                    $0.date >= from
+                        || ($0.bucketDuration > 0
+                            && $0.date.addingTimeInterval($0.bucketDuration) > from)
+                }
+        }
+    }
+
+    private func tieredHistory(
+        since: Double, until: Double = .greatestFiniteMagnitude, hours: Bool
+    ) throws -> [SystemHistoryPoint] {
         try databasePool.read { db in
             var points: [SystemHistoryPoint] = []
             var coveredThrough = since
             if hours {
-                points = try Self.aggregateHistory(db, table: "system_hour", since: since)
+                points = try Self.aggregateHistory(
+                    db, table: "system_hour", since: since, until: until)
                 let watermark = try Retention.meta(db, "hour_watermark") ?? 0
                 coveredThrough = max(coveredThrough, watermark)
             }
-            points += try Self.aggregateHistory(db, table: "system_minute", since: coveredThrough)
+            points += try Self.aggregateHistory(
+                db, table: "system_minute", since: coveredThrough, until: until)
             let watermark = try Retention.meta(db, "minute_watermark") ?? 0
             coveredThrough = max(coveredThrough, watermark)
-            points += try Self.rawHistory(db, since: coveredThrough)
+            points += try Self.rawHistory(db, since: coveredThrough, until: until)
             return points
         }
     }
@@ -284,7 +386,9 @@ extension SampleStore {
         try databasePool.read { db in try Self.rawHistory(db, since: since) }
     }
 
-    private static func rawHistory(_ db: Database, since: Double) throws -> [SystemHistoryPoint] {
+    private static func rawHistory(
+        _ db: Database, since: Double, until: Double = .greatestFiniteMagnitude
+    ) throws -> [SystemHistoryPoint] {
         try Row.fetchAll(
             db,
             sql: """
@@ -298,16 +402,29 @@ extension SampleStore {
                        vrail_temp, other_temp,
                        load_1, load_5, load_15
                 FROM system_samples
-                WHERE timestamp >= ?
+                WHERE timestamp >= ? AND timestamp <= ?
                 ORDER BY timestamp ASC
-                """, arguments: [since]
-        ).map(Self.decodeHistoryPoint)
+                """, arguments: [since, until]
+        ).map { row in
+            var point = decodeHistoryPoint(row)
+            point.cpuDieAverageC = point.cpuDieC
+            point.gpuDieAverageC = point.gpuDieC
+            point.cpuDieSampleCount = point.cpuDieC == nil ? 0 : 1
+            point.gpuDieSampleCount = point.gpuDieC == nil ? 0 : 1
+            return point
+        }
     }
 
     private static func aggregateHistory(
-        _ db: Database, table: String, since: Double
+        _ db: Database, table: String, since: Double, until: Double = .greatestFiniteMagnitude
     ) throws -> [SystemHistoryPoint] {
-        try Row.fetchAll(
+        let legacyBucketDuration: TimeInterval
+        if table == "system_hour" {
+            legacyBucketDuration = 3600
+        } else {
+            legacyBucketDuration = try Retention.meta(db, "minute_bucket_seconds") ?? 60
+        }
+        return try Row.fetchAll(
             db,
             sql: """
                 SELECT bucket, pressure_avg, app_avg, wired_avg, compressed_avg, cached_avg, swap_used_avg, cpu_avg,
@@ -322,22 +439,53 @@ extension SampleStore {
                        wireless_temp_max, vrail_temp_max, other_temp_max,
                        load_1_avg, load_5_avg, load_15_avg,
                        pressure_max, cpu_max, net_in_max, net_out_max,
-                       disk_read_max, disk_write_max, gpu_util_max, load_1_max
+                       disk_read_max, disk_write_max, gpu_util_max, load_1_max,
+                       samples, COALESCE(bucket_seconds, ?) AS bucket_seconds,
+                       pressure_min, cpu_min, net_in_min, net_out_min,
+                       disk_read_min, disk_write_min, gpu_util_min, load_1_min,
+                       app_min, wired_min, compressed_min, cached_min, swap_used_min,
+                       cpu_die_min, gpu_die_min,
+                       app_max, wired_max, compressed_max, cached_max, swap_used_max,
+                       cpu_die_avg, gpu_die_avg, cpu_die_samples, gpu_die_samples
                 FROM \(table)
-                WHERE bucket >= ?
+                WHERE bucket >= ? AND bucket <= ?
                 ORDER BY bucket ASC
-                """, arguments: [since]
+                """, arguments: [legacyBucketDuration, since, until]
         ).map(Self.decodeAggregatePoint)
     }
 
-    /// The shared decode plus the peak columns only the tiers have (41 on).
+    /// The shared decode plus the aggregate statistics (columns 41 through 74).
     private static func decodeAggregatePoint(_ row: Row) -> SystemHistoryPoint {
         var point = decodeHistoryPoint(row)
         point.peaks = SystemHistoryPeaks(
             pressurePercent: row[41], cpuLoad: row[42],
             networkInBytesPerSec: row[43], networkOutBytesPerSec: row[44],
             diskReadBytesPerSec: row[45], diskWriteBytesPerSec: row[46],
-            gpuUtilization: row[47], loadAverage1: row[48])
+            gpuUtilization: row[47], loadAverage1: row[48],
+            appMemory: row[66], wired: row[67], compressed: row[68],
+            cachedFiles: row[69], swapUsed: row[70],
+            cpuDieC: point.cpuDieC, gpuDieC: point.gpuDieC)
+        point.sampleCount = row[49]
+        point.bucketDuration = row[50]
+        // Required scalar minima are non-optional inside SystemHistoryPeaks.
+        // If even one is missing, omit the range rather than invent its floor.
+        if let pressure = row[51] as Double?, let cpu = row[52] as Double?,
+            let networkIn = row[53] as Double?, let networkOut = row[54] as Double?,
+            let diskRead = row[55] as Double?, let diskWrite = row[56] as Double?
+        {
+            point.minima = SystemHistoryPeaks(
+                pressurePercent: pressure, cpuLoad: cpu,
+                networkInBytesPerSec: networkIn, networkOutBytesPerSec: networkOut,
+                diskReadBytesPerSec: diskRead, diskWriteBytesPerSec: diskWrite,
+                gpuUtilization: row[57], loadAverage1: row[58],
+                appMemory: row[59], wired: row[60], compressed: row[61],
+                cachedFiles: row[62], swapUsed: row[63],
+                cpuDieC: row[64], gpuDieC: row[65])
+        }
+        point.cpuDieAverageC = row[71]
+        point.gpuDieAverageC = row[72]
+        point.cpuDieSampleCount = row[73]
+        point.gpuDieSampleCount = row[74]
         return point
     }
 

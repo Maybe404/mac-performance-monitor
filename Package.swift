@@ -102,6 +102,10 @@ let package = Package(
             name: "MacPerfMonitorIPCTests",
             dependencies: ["MacPerfMonitorIPC", "MacPerfMonitorCore"]
         ),
+        .testTarget(
+            name: "MacPerfMonitorTests",
+            dependencies: ["MacPerfMonitor", "MacPerfMonitorCore"]
+        ),
     ],
     swiftLanguageModes: [.v5]
 )

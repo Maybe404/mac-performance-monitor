@@ -203,6 +203,7 @@ public final class Sampler {
         var decompressions: UInt64
     }
     private var lastCounters: SystemCounters?
+    private var swapActivity = SwapActivityTracker()
     private var lastPressureLoad: UInt64?  // compressed + swapUsed, for trend
 
     /// Bytes-per-second growth of (compressed + swap) treated as full trend.
@@ -305,6 +306,7 @@ public final class Sampler {
             lastGPUReadAt.map({ now.timeIntervalSince($0) >= gpuReadInterval }) ?? true
         {
             var freshGPU = gpuReader.read()
+            freshGPU?.sampledAt = now
             // Thermal rides the GPU cadence but does not depend on the GPU
             // reader succeeding; SMCReader throttles itself internally.
             if let thermal = smcReader.read(now: now) { cachedThermal = thermal }
@@ -770,6 +772,7 @@ public final class Sampler {
         lastSystemTime = nil
         lastProcessTime = nil
         lastCounters = nil
+        swapActivity.reset()
         lastPressureLoad = nil
         lastCoreTicks = nil
         cachedBattery = nil
@@ -799,7 +802,16 @@ public final class Sampler {
         let totalRAM = memoryReader.totalRAM
         let vm = memoryReader.sampleVM()
         let swap = memoryReader.sampleSwap()
-        let level = memoryReader.pressureLevel()
+        let pressureReading = memoryReader.pressureLevelReading()
+        let level = pressureReading ?? .normal
+        let activity: SwapActivityTracker.Reading?
+        if let vm {
+            activity = swapActivity.sample(
+                at: now, pagesIn: vm.swapIns, pagesOut: vm.swapOuts, pageSize: vm.pageSize)
+        } else {
+            swapActivity.reset()
+            activity = nil
+        }
 
         let compressed = vm?.compressed ?? 0
         let swapUsed = swap?.used ?? 0
@@ -900,6 +912,14 @@ public final class Sampler {
             // record survives even when no thermal surface is active.
             thermalPressure: ThermalPressureState(ProcessInfo.processInfo.thermalState)
         )
+        sample.swapSampleValid = swap != nil
+        sample.pressureSampleValid = pressureReading != nil
+        sample.swapInBytesPerSecond = activity?.rateIn
+        sample.swapOutBytesPerSecond = activity?.rateOut
+        sample.swapInPagesDelta = activity?.pagesIn
+        sample.swapOutPagesDelta = activity?.pagesOut
+        sample.memoryPageSize = activity?.pageSize
+        sample.memorySampleInterval = activity?.elapsed
         // Assigned rather than passed: the memberwise call is already at the
         // type checker's practical limit, and every one of these is a plain
         // optional copy.
