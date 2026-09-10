@@ -33,7 +33,9 @@ verification results will be recorded below. Keep the cask on a public package.
   passed build, tests, lint, source coverage, catalog compilation, and compiler
   string coverage on that commit.
 
-- [ ] Push build 231 metadata and verify hosted CI on the final release commit.
+- [x] Push build 231 metadata at `86a77f82e67b23ab2fa27644ec31dce546376a10`.
+  [Final release CI](https://github.com/Zesty0wl/mac-performance-monitor/actions/runs/34503581438)
+  passed every gate on that exact commit.
 
 - [ ] Review the 305 new `needs_review` entries in each of Simplified Chinese,
   German, and French with native speakers. Coverage is not native approval.
@@ -63,11 +65,38 @@ This verifies the preparation tree, not a future commit or signed installer.
   1.7.1. The feed advances build 206 to 231, keeps macOS 15 and arm64 limits,
   and names the exact versioned archive with its correct byte count.
 
-- [ ] Verify the uploaded draft assets, then publish and check the public URLs.
+- [x] Verify the draft downloads byte-for-byte, publish, and check all three
+  public asset URLs. The latest installer and appcast, plus the versioned ZIP,
+  return HTTP 200 and match the verified files.
 
 Native translation review, a fresh end-to-end 1.7.1 update, and a new extended
 soak remain unverified in this release pass. Earlier automated regression and
 fixture checks do not replace those manual checks.
+
+## Published Release
+
+[2.0.0 build 231](https://github.com/Zesty0wl/mac-performance-monitor/releases/tag/v2.0.0.231)
+was published as the latest stable release on 10 September 2026 at 16:45 UTC.
+The annotated tag `v2.0.0.231` points to the tested release commit above.
+The appcast embeds the release notes and uses the existing Sparkle signing key.
+
+Both the installer and ZIP contain the same signed app. All 2,437 catalog keys
+resolve from all four languages in each extracted bundle. The following hashes
+match the unauthenticated public downloads:
+
+```text
+MacPerformanceMonitor.pkg
+746eee1508474c775bc98934f18592c58947de7a68ec30d2c98d703fffd2c63c
+
+MacPerformanceMonitor-2.0.0.231.zip
+a9af4faa58b7c91cadb29ddf4663c12384f001123ba54e38402058ef66a1fd69
+
+appcast.xml
+2904d4cebd9990c7bb5b2eecb2a94ab4e3a16059ee25dc7d6492015374ea4a11
+```
+
+The repository's cask now uses that published package hash. Homebrew's separate
+public cask can lag the release; its update is not part of the Sparkle rollout.
 
 ## Local Checks
 
