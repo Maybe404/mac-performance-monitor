@@ -1,8 +1,8 @@
 # Mac Performance Monitor 2.0.0
 
-10 September 2026. For Apple silicon Macs running macOS 15 or later.
+Build 231, 10 September 2026. For Apple silicon Macs running macOS 15 or later.
 
-[Download the signed installer](https://github.com/Zesty0wl/mac-performance-monitor/releases/latest/download/MacPerformanceMonitor.pkg).
+[Download the signed installer](https://github.com/Zesty0wl/mac-performance-monitor/releases/download/v2.0.0.231/MacPerformanceMonitor.pkg).
 Existing installs can use **Check for Updates** to update through Sparkle.
 
 ## Explore What Happened
@@ -80,7 +80,7 @@ Performance history stays on your Mac. Updates, signed content downloads, and
 network tools use the network but do not upload that history. Review exports
 and screenshots before sharing them.
 
-See the [full changelog](https://github.com/Zesty0wl/mac-performance-monitor/blob/main/CHANGELOG.md),
-[Explorer guide](https://github.com/Zesty0wl/mac-performance-monitor/blob/main/docs/explorer-design.md),
-[alert policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/main/docs/adaptive-alerts.md),
-and [security policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/main/SECURITY.md).
+See the [full changelog](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/CHANGELOG.md),
+[Explorer guide](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/docs/explorer-design.md),
+[alert policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/docs/adaptive-alerts.md),
+and [security policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/SECURITY.md).

@@ -28,10 +28,12 @@ verification results will be recorded below. Keep the cask on a public package.
   correct the French Explorer capacity warning. See the
   [translation audit](../TRANSLATING.md#coverage-audit-10-september-2026).
 
-- [ ] Commit and push the approved preparation changes, then get green hosted
-  CI on that exact commit. The old failed run is not evidence of readiness.
+- [x] Commit the preparation changes and fast-forward `main` to `8a8155a`.
+  [Hosted CI](https://github.com/Zesty0wl/mac-performance-monitor/actions/runs/34502106577)
+  passed build, tests, lint, source coverage, catalog compilation, and compiler
+  string coverage on that commit.
 
-- [ ] Rerun the local checks on the final release source if it changes.
+- [ ] Push build 231 metadata and verify hosted CI on the final release commit.
 
 - [ ] Review the 305 new `needs_review` entries in each of Simplified Chinese,
   German, and French with native speakers. Coverage is not native approval.
@@ -42,6 +44,30 @@ verification results will be recorded below. Keep the cask on a public package.
 Local verification on 10 September 2026 used Swift 6.3.3: 786 tests, two skips,
 and no failures. The skips need a recorded database and a live hardware capture.
 This verifies the preparation tree, not a future commit or signed installer.
+
+## Build 231 Checks
+
+- [x] Build 2.0.0, build 231 from `main` without a marketing-version bump.
+  The app and helper share the expected Apple team identity.
+
+- [x] Apple accepted the app for notarization: `30fd89eb-bb15-4386-9d1a-d86b59b5acbf`.
+  The installed copy passes signature, stapling, and Gatekeeper checks.
+
+- [x] Apple accepted the package: `4061e2ff-2c8f-47df-b2e2-3bdbcdec2f72`.
+  The installer signature, staple, and Gatekeeper checks pass.
+
+- [x] The installed app opens its window and draws Dashboard history and live
+  readings. The helper is running. This is a launch check, not a full soak.
+
+- [x] The Sparkle ZIP signature verifies against the public key shipped in
+  1.7.1. The feed advances build 206 to 231, keeps macOS 15 and arm64 limits,
+  and names the exact versioned archive with its correct byte count.
+
+- [ ] Verify the uploaded draft assets, then publish and check the public URLs.
+
+Native translation review, a fresh end-to-end 1.7.1 update, and a new extended
+soak remain unverified in this release pass. Earlier automated regression and
+fixture checks do not replace those manual checks.
 
 ## Local Checks
 
@@ -142,6 +168,10 @@ it does not rebuild the package between checking its hash and uploading it.
 
    Both commands use signing credentials and Apple notarization. If a prompt
    needs a password, enter it directly in your terminal. Never put it in chat.
+
+Convert the release notes to an HTML fragment beside the ZIP, using the same
+filename stem. Regenerate the appcast with `--embed-release-notes` and the
+existing key. Check the embedded text and signature before uploading the feed.
 
 4. Verify source/app version and build parity, signatures, notarization, and stapling. Run the smoke tests above and record any manual checks not run. Use full URLs in the release notes. Commit and push the source, notes, and build metadata, then verify CI on that commit. Keep the worktree clean and HEAD equal to upstream.
 
