@@ -1,10 +1,94 @@
-# 2.0 Release Checklist
+# Release Checklist
+
+## 2.1.0 Release
+
+The maintainer approved publishing 2.1.0 from `main` on 11 September 2026.
+The release build is 236; the prior public release is 2.0.0, build 231.
+Keep the production feed unchanged until the draft downloads pass verification.
+
+### Source And Build
+
+- [x] Start from clean `main` at `c413b5d`. Hosted CI run `34594914002`
+  passed all gates. The local suite ran 849 tests with two skips and no failures.
+
+- [x] Finalize the 2.1.0 changelog, release notes, README, and documentation index.
+  Keep native translation review and missing older battery data limits visible.
+
+- [x] Confirm Apple signing and notary access. Keep the existing Sparkle key
+  and feed URL. Never generate a replacement key during a release.
+
+- [x] Build and sign 2.1.0 build 236 with `Scripts/install.sh --no-launch`.
+  The locked Mac blocked keychain access. After unlock, notarization resumed
+  with the same signed bytes, without a rebuild or another build increment.
+
+- [x] Package with `Scripts/deploy.sh --resume --skip-upload`.
+  App, helper, installer, notarization, staples, and Gatekeeper checks pass.
+
+- [x] Embed the release notes in the appcast. Verify the archive signature with
+  the public key from the shipped 2.0.0 bundle. Archive size, version, download
+  URL, minimum macOS 15.0, arm64 requirement, and embedded notes match.
+
+- [x] Extract both artifacts. All files and symlinks match the signed source
+  and installed app. All 2,499 catalog keys resolve in all four language bundles.
+
+- [x] Test an upgrade from a populated v18 database. Old charge and temperature
+  survive the new migrations; missing Energy values remain unknown. The full
+  local suite passes 850 tests with two skips, plus formatting and both
+  localization checks. The release build compiles the String Catalog.
+
+- [x] Install the verified bundle and launch it. The helper is running and
+  Energy draws live readings, retained charts, and accessory batteries. A
+  private history backup passes SQLite integrity checks. This is a smoke test,
+  not an end-to-end Sparkle UI upgrade or an extended soak.
+
+- [ ] Push the final source and build metadata. Confirm green CI and a clean
+  worktree at the exact commit used for the release tag.
+
+### Publication
+
+- [ ] Create a new annotated tag at the verified commit. Do not move an old tag.
+
+- [ ] Create a draft release with that tag and the signed ZIP, package, and feed.
+  Download the draft assets and compare their hashes before publishing.
+
+- [ ] Publish as the latest stable release. Verify public downloads return the
+  same bytes and the latest Sparkle feed names 2.1.0 build 236.
+
+- [ ] Update the repository cask with the exact published package checksum.
+  Record the release commit, CI result, notary IDs, and artifact hashes here.
+
+### Manual Coverage
+
+Native translation review, a fresh end-to-end Sparkle UI update from 2.0.0,
+and an extended workload soak remain separate from automated checks. Do not
+claim them from unit tests or a short launch check. Runtime estimates still
+need checks across real workloads. Synthetic daily data is not a year-long soak.
+
+### Verified Artifacts
+
+Apple accepted the app submission `4718bd42-2410-4100-9245-926cff280076`
+and the package submission `473b14b1-bd46-4244-96f7-a52cfe359022`.
+Both use Apple team `8352865GK4`. The existing Sparkle key is unchanged.
+These are the exact local artifacts reserved for the draft upload:
+
+```text
+MacPerformanceMonitor.pkg
+04e88fb0a8269495f9bbd51ecc1f7c2363fcec47d4912c8e05798165c3af9ea1
+
+MacPerformanceMonitor-2.1.0.236.zip
+b3a77e2a703e39af05ec2a44a8386dbced023578862878f6a30e93f4052f6f24
+
+appcast.xml
+4c69659aeb341e68e620c4c5cfb0fc81e51ca5f10dedc76966b9bd3575a2cf36
+```
+
+## 2.0 Release Record
 
 The maintainer approved publishing 2.0.0 from `main` on 10 September 2026.
 Keep unfinished checks open until someone verifies them. Native translation
 review remains a disclosed limitation, not a completed check.
 
-## Source Status
+### Source Status
 
 Preparation began on `2.0.0` at `c3508bc`, version 2.0.0, build 230.
 The preceding public release is 1.7.1, build 206. The final release build and
@@ -47,7 +131,7 @@ Local verification on 10 September 2026 used Swift 6.3.3: 786 tests, two skips,
 and no failures. The skips need a recorded database and a live hardware capture.
 This verifies the preparation tree, not a future commit or signed installer.
 
-## Build 231 Checks
+### Build 231 Checks
 
 - [x] Build 2.0.0, build 231 from `main` without a marketing-version bump.
   The app and helper share the expected Apple team identity.
@@ -73,7 +157,7 @@ Native translation review, a fresh end-to-end 1.7.1 update, and a new extended
 soak remain unverified in this release pass. Earlier automated regression and
 fixture checks do not replace those manual checks.
 
-## Published Release
+### Published Release
 
 [2.0.0 build 231](https://github.com/Zesty0wl/mac-performance-monitor/releases/tag/v2.0.0.231)
 was published as the latest stable release on 10 September 2026 at 16:45 UTC.
@@ -98,7 +182,7 @@ appcast.xml
 The repository's cask now uses that published package hash. Homebrew's separate
 public cask can lag the release; its update is not part of the Sparkle rollout.
 
-## Local Checks
+### Local Checks
 
 Run from the repository root. These commands do not publish, sign, or install:
 
@@ -121,7 +205,7 @@ release gate list.
 Validate Markdown links and image references too. Check badge and download
 links against the branch or release that readers will actually open.
 
-## Upgrade And Runtime Gates
+### Upgrade And Runtime Gates
 
 - [ ] Test an upgrade from the published 1.7.1 package with a backup of its data.
   Verify retained history and new schema fields without inventing old values.
@@ -149,7 +233,7 @@ links against the branch or release that readers will actually open.
   alert noise. Record the duration and workload rather than declaring a soak
   from a short unit test.
 
-## Publishing Hazards
+### Publishing Hazards
 
 Read [deploy.sh](../Scripts/deploy.sh) before running it. Its default mode bumps
 the patch version. From this branch, plain `Scripts/deploy.sh` would produce
@@ -175,7 +259,7 @@ Keep the existing Sparkle EdDSA signing key. A replacement key would break
 updates for installed apps. Recover the original key if it is missing; do not
 generate a new one as part of this release.
 
-## Approved Release Sequence
+### Approved Release Sequence
 
 Use a draft release so the production feed stays unchanged until the uploaded
 assets have been checked. This path publishes the exact verified package;
@@ -221,7 +305,7 @@ existing key. Check the embedded text and signature before uploading the feed.
 
 8. Update the local cask version and checksum from that exact published package, then commit and push it to `main`. This draft workflow bypasses the publisher's automatic cask edit. Check Homebrew's separate public cask update; its timing is not guaranteed.
 
-## Evidence To Retain
+### Evidence To Retain
 
 Record the final commit, build, tag, CI URL, test results and skips, upgrade/soak
 notes, notarization results, and hashes of the published files. Keep private

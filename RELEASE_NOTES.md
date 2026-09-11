@@ -1,86 +1,78 @@
-# Mac Performance Monitor 2.0.0
+# Mac Performance Monitor 2.1.0
 
-Build 231, 10 September 2026. For Apple silicon Macs running macOS 15 or later.
+Build 236, 11 September 2026. For Apple silicon Macs running macOS 15 or later.
 
-[Download the signed installer](https://github.com/Zesty0wl/mac-performance-monitor/releases/download/v2.0.0.231/MacPerformanceMonitor.pkg).
+[Download the signed installer](https://github.com/Zesty0wl/mac-performance-monitor/releases/download/v2.1.0.236/MacPerformanceMonitor.pkg).
 Existing installs can use **Check for Updates** to update through Sparkle.
 
-## Explore What Happened
+## Energy In More Detail
 
-Explorer replaces the Analytics start screen. Inspect a moment in your Mac's
-history, compare up to eight processes, and put machine and sensor charts on
-the same timeline. Search for running or exited processes, pin a time, and read
-the source values and timestamps in the inspector.
+All six Energy cards now open a larger chart with values and explanations:
+Charge, Estimated runtime, Mac power draw, Battery temperature, Health, and
+Cycles. Detail views are snapshots, so they stay still while you inspect them.
+Their range controls work without changing the main page.
 
-Use a chart grid, a list, or an expanded chart. Hold Command and scroll to zoom
-around the pointer while ordinary scrolling still moves the page. Export the
-visible source data as CSV or share process history in a trace file. Existing
-trace imports remain supported.
+Health and Cycles have their own month and year ranges. Daily records keep
+each battery pack separate and survive the usual 90-day history limit. They
+still count toward the database size cap. Long-term trends grow from real
+readings with history logging on; missing older data stays missing.
 
-## Alerts That Follow Change
+Runtime uses the macOS estimate first. If it is absent, the app can estimate
+runtime after at least three minutes of steady discharge. Past estimates stay
+as recorded. A separate dashed line forecasts charge at the same rate of use.
+It is a forecast, not a promise or a real charge reading. While charging, the
+card shows time to full instead.
 
-Stable high swap usage alone no longer triggers an alert. Swap warnings use
-continued growth or paging strain. A condition can escalate as it worsens,
-without first dropping below yesterday's fixed threshold.
+Mac power draw and battery flow are distinct. Positive battery flow means
+charging; negative flow means draining. Charge and runtime also offer
+**Since unplugging** when the app saw the switch to battery power. Headings
+and values fit narrow windows, and every card opens even without history.
 
-Process checks reject stale readings and growth that has settled. Modest
-findings stay under Observations, not in the red alert count. A separate
-fast-growth check can catch runaway use before the longer analysis is ready.
-Growth is evidence to investigate, not proof of a memory leak.
+## Accessory Batteries
 
-Click the menu bar badge to see active alerts by process or machine. Open an
-alert's evidence in Explorer, or snooze ordinary notices for one hour. Related
-memory alerts share a notice. Only critical notices request sound, and incident
-state survives an app restart.
+Energy now shows the battery levels macOS reports for mice, keyboards,
+AirPods, and other devices. Left, right, and case levels appear when known.
+A charging icon appears only when macOS reports that state.
 
-## Clearer Charts And Controls
+The app checks at most once a minute. macOS can return cached values, so a
+report is not proof of a fresh reading. Missing values stay unknown, and a
+failed check labels retained values as last reported.
 
-Dashboard and Explorer show a clear average over a translucent recorded range.
-Short bursts stay visible, and missing readings remain gaps. Historical shapes
-stay stable as new data arrives. Dashboard cards open larger, frozen detail
-views with their values and explanations.
+Low accessory battery alerts are off by default. Turn them on in
+**Settings > Alerts** and choose a level from 5% to 50%, with 20% as the default.
+Two low reports confirm a warning. AirPods parts share one quiet notice,
+which opens Energy. Notices wait for charge to recover before repeating.
+With alerts on, checks continue while the app runs, even with Energy hidden.
 
-Energy charts now have hover details with the right units. Disk and network
-menu panels keep their layout as readings change. This release also fixes a
-crash during history maintenance, empty first-open detail sheets, and GPU
-temperature discovery that could discard a sensor for the whole session.
+## History Across Restarts
 
-## Run It Your Way
+Process detail and Explorer charts can include earlier, non-overlapping
+instances of the same program. A restart leaves a break in the line and in
+disk-rate calculations. Concurrent instances are not added together.
 
-The menu bar item and history recorder have separate switches. Open the app
-from the Dock, Spotlight, or Launchpad even with the menu bar item hidden.
-The Dock icon follows the window, with an option to keep it visible. Login
-launches stay quiet.
-
-English, Simplified Chinese, German, and French have full string coverage.
-Generated translations still need native review. Sparkle is updated to 2.9.6,
-including fixes for the August 2026 security advisories.
+The Dashboard now shows uptime beneath the machine details, with the boot
+date on hover. It includes sleep and refreshes once a minute.
 
 ## Before You Upgrade
 
-- You still need Apple silicon and macOS 15 or later.
+- Existing history and trace files remain readable. New fields cannot recover
+  data that earlier versions did not store. Back up your data before a downgrade.
 
-- Existing alert choices carry forward. The old fixed swap ceiling is no
-  longer used. Explicit process-memory budgets remain a separate option.
+- Accessory reports use a macOS command whose output is not a public API.
+  Bounded reads and defensive parsing handle missing or changed fields.
+  Future macOS changes may still make these reports unavailable.
 
-- Existing history and trace files remain readable. New fields preserve more
-  detail from new samples; they cannot reconstruct missing historical data.
-  Back up the app's data before testing a downgrade.
+- Health, cycles, and runtime estimates do not predict a battery failure date.
+  Runtime depends on workload, and long-term wear history starts with new readings.
 
-- Alert checkpoints and delivery logs remain local and are separate from full
-  history recording. They can retain evidence even with that recording off.
-
-- Hardware inventory is a current snapshot, not a historical device list.
-  Older chart data remains limited by the resolution that was retained.
-
-- Use Quiet Evaluation to observe growth rules without growth notifications.
-  Critical-pressure protection and explicit budgets keep their own settings.
+- English, Simplified Chinese, German, and French have full string coverage.
+  Generated translations still need review by native speakers.
 
 Performance history stays on your Mac. Updates, signed content downloads, and
-network tools use the network but do not upload that history. Review exports
-and screenshots before sharing them.
+network tools use the network but do not upload that history.
 
-See the [full changelog](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/CHANGELOG.md),
-[Explorer guide](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/docs/explorer-design.md),
-[alert policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/docs/adaptive-alerts.md),
-and [security policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.0.0.231/SECURITY.md).
+Read the [full changelog](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.1.0.236/CHANGELOG.md)
+and [Energy guide](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.1.0.236/docs/energy-design.md).
+The [Explorer guide](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.1.0.236/docs/explorer-design.md)
+and [security policy](https://github.com/Zesty0wl/mac-performance-monitor/blob/v2.1.0.236/SECURITY.md)
+cover other features and data handling.

@@ -71,6 +71,50 @@ final class BatteryTests: XCTestCase {
         XCTAssertNil(minute.counts[.temperature])
     }
 
+    func testUpgradeFromVersionTwoPreservesRecordedHistory() throws {
+        let directory = tempURL.appendingPathExtension("upgrade")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let legacyURL = directory.appendingPathComponent("history.sqlite")
+        let timestamp = Date(timeIntervalSince1970: 1_700_006_400)
+        do {
+            let pool = try DatabasePool(path: legacyURL.path)
+            try MacPerfMonitorDatabase.migrator.migrate(pool, upTo: "v18-swap-activity")
+            let legacyStore = SampleStore(pool: pool)
+            var sample = Make.system(timestamp: timestamp)
+            sample.batteryPresent = true
+            sample.batteryCharge = 75
+            sample.batteryHealthPercent = 94
+            sample.batteryTemperatureCelsius = 30
+            try legacyStore.insert(systemSample: sample)
+        }
+
+        let migratedStore = try SampleStore(url: legacyURL)
+        let history = try migratedStore.batteryHistory(.oneHour, now: timestamp)
+        XCTAssertEqual(history.count, 1)
+        let point = try XCTUnwrap(history.first)
+        XCTAssertEqual(point.date, timestamp)
+        XCTAssertEqual(point.values[.charge], 75)
+        XCTAssertEqual(point.values[.temperature], 30)
+        XCTAssertNil(point.values[.power])
+        XCTAssertNil(point.values[.runtime])
+        XCTAssertNil(point.batteryID)
+        let dailyCount = try migratedStore.databasePool.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM battery_daily")
+        }
+        XCTAssertEqual(dailyCount, 0)
+        let sample = BatterySample(
+            timestamp: timestamp.addingTimeInterval(5), isPresent: true, chargePercent: 74,
+            cycleCount: 100, healthPercent: 94, serialNumber: "upgrade-pack")
+        try migratedStore.insert(
+            systemSample: Make.system(timestamp: sample.timestamp), battery: sample)
+        let identifier = try XCTUnwrap(BatteryIdentity.identifier(for: sample.serialNumber))
+        let daily = try migratedStore.batteryDailyHistory(
+            for: identifier, through: sample.timestamp)
+        XCTAssertEqual(daily.count, 1)
+        XCTAssertEqual(daily.first?.cycleCount, 100)
+    }
+
     func testEnergyHistoryIncludesOlderWideBucketAcrossPolicyChanges() throws {
         let start = Date(timeIntervalSince1970: 1_700_006_400)
         let battery = BatterySample(timestamp: start, isPresent: true, chargePercent: 75)

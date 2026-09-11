@@ -23,10 +23,30 @@ open when needed. The menu bar and history recorder have separate switches.
 
 Free and open source. No usage telemetry. Recorded samples stay on your Mac.
 
-[2.0 release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) ·
+[2.1 release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) ·
 [Documentation](docs/README.md)
 
 [![Explorer showing linked machine and process charts with a value inspector](docs/images/explorer.png)](docs/images/explorer.png)
+
+## New In 2.1
+
+All six Energy cards open larger charts and explanations. Charge, runtime,
+Mac power draw, and battery temperature have their own detail ranges. Health
+and Cycles show daily history over months and years, kept separate for each
+battery pack. Long-term history grows from new readings with recording on.
+
+Runtime uses macOS estimates or recent steady use. A dashed forecast stays
+separate from real charge data. It assumes the same workload, not a fixed
+promise of how long the battery will last.
+
+The Accessories panel shows the battery levels macOS reports for mice,
+keyboards, AirPods, and other devices. Optional low-battery alerts live in
+Settings > Alerts. Checks run at most once a minute; unknown values stay unknown.
+
+Process detail and Explorer can show earlier, non-overlapping runs of the same
+program, with gaps at restarts. The Dashboard also shows uptime and the boot date.
+
+[Energy guide](docs/energy-design.md)
 
 ## New In 2.0
 

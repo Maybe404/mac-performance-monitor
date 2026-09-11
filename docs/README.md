@@ -1,13 +1,15 @@
 # Documentation
 
-Use these guides for Mac Performance Monitor 2.0. The source branch is `main`.
+Use these guides for Mac Performance Monitor 2.1. The source branch is `main`.
 Published packages and Homebrew follow public releases, not every source change.
 
 ## Product And Support
 
 - [Project overview and screenshots](../README.md).
 
-- [2.0 release notes](../RELEASE_NOTES.md) and [changelog](../CHANGELOG.md).
+- [2.1 release notes](../RELEASE_NOTES.md) and [changelog](../CHANGELOG.md).
+
+- [Energy](energy-design.md): card details, runtime forecasts, and battery history.
 
 - [Explorer](explorer-design.md): investigate recorded and live data at a chosen time.
 

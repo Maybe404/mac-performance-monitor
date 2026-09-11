@@ -6,6 +6,8 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-11
+
 ### Added
 
 - The Dashboard now shows uptime beneath the machine details, with the boot
@@ -919,7 +921,8 @@ processes behind them.
 - A clean split between a headless, unit-tested data layer and the SwiftUI app. CI
   builds, tests, and lints on every push and pull request.
 
-[Unreleased]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v2.0.0.231...HEAD
+[Unreleased]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v2.1.0.236...HEAD
+[2.1.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v2.0.0.231...v2.1.0.236
 [2.0.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.7.1.206...v2.0.0.231
 [1.7.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.6.0.204...v1.7.0.205
 [1.6.0]: https://github.com/Zesty0wl/mac-performance-monitor/compare/v1.5.0.198...v1.6.0.204
