@@ -9,6 +9,8 @@ enum MetricUnit {
     case watts
     case celsius
     case rpm
+    case minutes
+    case count
 
     func format(_ value: Double) -> String {
         switch self {
@@ -17,6 +19,15 @@ enum MetricUnit {
         case .watts: return String(format: "%.2f W", value)
         case .celsius: return "\(Int(value.rounded()))°C"
         case .rpm: return "\(Int(max(0, value.rounded()))) rpm"
+        case .minutes:
+            guard value.isFinite, value >= 0, value < Double(Int.max) else {
+                return t("Not reported")
+            }
+            if value < 1 { return t("0 min") }
+            return BatteryFormat.duration(minutes: Int(value.rounded(.down)))
+        case .count:
+            guard value.isFinite, value >= 0 else { return t("Not reported") }
+            return value.formatted(.number.precision(.fractionLength(0)))
         }
     }
 }
@@ -70,6 +81,9 @@ struct MetricCardData: Identifiable {
     /// `value`, `samples` and `yDomain` then only seed the detail sheet.
     var live: MetricCardFeed? = nil
     var statisticsModel: TrendModel? = nil
+    var timeDomain: ClosedRange<Date>? = nil
+    var context: String? = nil
+    var expandedLabels = false
 
     var id: String { label }
 
@@ -136,6 +150,7 @@ struct MetricCard: View {
     /// When true, the graph area shows a spinner in place of the sparkline while
     /// the page's range data reloads. Gauges (live state) are left as-is.
     var loading: Bool = false
+    var onOpen: (() -> Void)? = nil
 
     private struct DetailSnapshot: Identifiable {
         let id = UUID()
@@ -166,8 +181,27 @@ struct MetricCard: View {
     }
 
     private func openDetails() {
+        if let onOpen {
+            onOpen()
+            return
+        }
         guard data.explanation != nil, !loading else { return }
-        detailSnapshot = DetailSnapshot(data: data.snapshot, xDomain: data.live?.xDomain ?? xDomain)
+        detailSnapshot = DetailSnapshot(
+            data: data.snapshot, xDomain: data.timeDomain ?? data.live?.xDomain ?? xDomain)
+    }
+
+    private var cardChart: TrendModel? {
+        guard var model = data.statisticsModel else { return nil }
+        model.bare = true
+        model.showsTimeAxis = false
+        model.plotBorder = false
+        return model
+    }
+
+    private var valueLayout: AnyLayout {
+        data.expandedLabels
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
     }
 
     private var cardBody: some View {
@@ -184,7 +218,8 @@ struct MetricCard: View {
                     .font(.caption2.weight(.semibold))
                     .tracking(0.6)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(data.expandedLabels ? 2 : 1, reservesSpace: data.expandedLabels)
+                    .minimumScaleFactor(data.expandedLabels ? 0.8 : 1)
                 Spacer(minLength: 4)
                 if data.explanation != nil {
                     Image(systemName: "info.circle")
@@ -194,7 +229,7 @@ struct MetricCard: View {
             }
             // The number does the talking: a precise, neutral, monospaced value
             // rather than a loud colour. Any reference detail trails quietly.
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            valueLayout {
                 if let live = data.live {
                     LiveValueLabel(feed: live)
                 } else {
@@ -204,11 +239,12 @@ struct MetricCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-                if let detail = data.detail {
-                    Text(detail)
+                if data.detail != nil || data.expandedLabels {
+                    Text(data.detail ?? " ")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .accessibilityHidden(data.detail == nil)
                 }
             }
             Group {
@@ -221,14 +257,23 @@ struct MetricCard: View {
                     ProgressView()
                         .controlSize(.small)
                         .frame(maxWidth: .infinity, alignment: .center)
+                } else if let chart = cardChart {
+                    TrendSnapshotChart(model: chart, onActivate: openDetails)
                 } else if data.samples.count >= 2 {
-                    StaticCardStrip(data: data, xDomain: xDomain, onActivate: openDetails)
+                    StaticCardStrip(
+                        data: data, xDomain: data.timeDomain ?? xDomain, onActivate: openDetails)
                 } else {
                     Color.clear
                 }
             }
             .frame(height: MetricCard.stripHeight)
             .accessibilityHidden(true)
+            if let context = data.context {
+                Text(context)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         // Fill the row's height so cards of differing content (e.g. beside the
         // Processes-tab core grid) come out the same height; in an equal-height row
@@ -381,6 +426,7 @@ struct MetricCardsRow: View {
     /// Forwarded to each card: shows a spinner in the graph area while the page's
     /// range data reloads.
     var loading: Bool = false
+    var onSelect: ((MetricCardData) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -433,7 +479,11 @@ struct MetricCardsRow: View {
         Group {
             if fitsOnOneRow {
                 HStack(alignment: .top, spacing: Self.spacing) {
-                    ForEach(cards) { MetricCard(data: $0, xDomain: xDomain, loading: loading) }
+                    ForEach(cards) { card in
+                        MetricCard(
+                            data: card, xDomain: xDomain, loading: loading,
+                            onOpen: onSelect.map { select in { select(card) } })
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: Self.spacing) {
@@ -441,7 +491,9 @@ struct MetricCardsRow: View {
                         HStack(alignment: .top, spacing: Self.spacing) {
                             ForEach(Array(row.enumerated()), id: \.offset) { _, card in
                                 if let card {
-                                    MetricCard(data: card, xDomain: xDomain, loading: loading)
+                                    MetricCard(
+                                        data: card, xDomain: xDomain, loading: loading,
+                                        onOpen: onSelect.map { select in { select(card) } })
                                 } else {
                                     Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
                                 }
@@ -630,7 +682,7 @@ struct MetricDetailChart: View {
     private var reduction: TrendSurfaceSeries.Reduction {
         switch unit {
         case .celsius, .rpm: return .maximum
-        case .percent, .bytes, .watts: return .mean
+        case .percent, .bytes, .watts, .minutes, .count: return .mean
         }
     }
 
@@ -681,7 +733,8 @@ struct MetricDetailChart: View {
         switch unit {
         case .percent: return 0...100
         case .bytes: return 0...LiveChartGeometry.niceCeiling(max(peak * 1.12, 1))
-        case .watts, .rpm: return 0...LiveChartGeometry.niceCeiling(max(peak * 1.2, 1))
+        case .watts, .rpm, .minutes, .count:
+            return 0...LiveChartGeometry.niceCeiling(max(peak * 1.2, 1))
         case .celsius:
             let low = values.min() ?? peak
             return ChartDomain.fitted(min: low, max: peak, minimumSpan: 30, padding: 5, floor: 0)

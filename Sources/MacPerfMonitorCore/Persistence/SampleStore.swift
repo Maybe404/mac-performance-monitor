@@ -78,6 +78,8 @@ public final class SampleStore {
     public func insert(_ snapshot: Sampler.Snapshot) throws {
         try writeRecoveringCaches { db in
             try self.insertSystem(snapshot.system, db: db)
+            try Self.recordBatteryHistory(
+                snapshot.battery, timestamp: snapshot.system.timestamp, db: db)
             for sample in snapshot.processes {
                 let processID = try self.processID(for: sample, db: db)
                 try self.insertProcessSample(sample, processID: processID, db: db)
@@ -88,9 +90,10 @@ public final class SampleStore {
     /// Persist only the system-level row for one tick. Used by the live app on
     /// the dashboard path, where per-process history is not yet needed and the
     /// 60 MB / 2% budget rewards writing a single row rather than ~600.
-    public func insert(systemSample: SystemSample) throws {
+    public func insert(systemSample: SystemSample, battery: BatterySample? = nil) throws {
         try writeRecoveringCaches { db in
             try self.insertSystem(systemSample, db: db)
+            try Self.recordBatteryHistory(battery, timestamp: systemSample.timestamp, db: db)
         }
     }
 
@@ -125,12 +128,14 @@ public final class SampleStore {
     /// retention `standardResBucket`.
     @discardableResult
     public func insertChanged(
-        _ system: SystemSample, processes: [ProcessSample], bucket: Double
+        _ system: SystemSample, processes: [ProcessSample], bucket: Double,
+        battery: BatterySample? = nil
     )
         throws -> Int
     {
         try writeRecoveringCaches { db in
             try self.insertSystem(system, db: db)
+            try Self.recordBatteryHistory(battery, timestamp: system.timestamp, db: db)
             var written = 0
             for sample in processes where self.shouldWrite(sample, bucket: bucket) {
                 let processID = try self.processID(for: sample, db: db)

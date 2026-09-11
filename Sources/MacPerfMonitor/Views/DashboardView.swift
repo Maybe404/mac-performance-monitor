@@ -118,6 +118,8 @@ struct DashboardView: View {
                 Text(topology.brand)
                     .font(.headline)
                 DashboardSystemSubtitle(timeline: timeline, topology: topology)
+                DashboardUptime()
+                    .padding(.top, 3)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
@@ -573,6 +575,42 @@ private func dashboardFootnote(_ text: LocalizedStringKey) -> some View {
 
 private func percent(_ fraction: Double) -> String {
     "\(Int((fraction * 100).rounded()))%"
+}
+
+struct DashboardUptime: View {
+    private static let currentBootTime = SystemBootTime.read()
+    var bootTime: Date? = DashboardUptime.currentBootTime
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text("Uptime")
+                    .foregroundStyle(.secondary)
+                Text(Self.value(since: bootTime, now: context.date))
+                    .fontWeight(.medium)
+                    .monospacedDigit()
+            }
+            .font(.callout)
+            .lineLimit(1)
+            .accessibilityElement(children: .combine)
+            .help(
+                bootTime.map {
+                    t("Last boot") + ": " + $0.formatted(date: .abbreviated, time: .standard)
+                } ?? t("Not reported"))
+        }
+    }
+
+    static func value(since bootTime: Date?, now: Date) -> String {
+        guard let bootTime else { return t("Not reported") }
+        let elapsed = now.timeIntervalSince(bootTime)
+        guard elapsed.isFinite, elapsed >= 0, elapsed < Double(Int.max) else {
+            return t("Not reported")
+        }
+        return HardwareUptime.string(since: bootTime, now: now)
+    }
 }
 
 // MARK: - Live window and feeds

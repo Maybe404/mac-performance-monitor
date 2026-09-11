@@ -128,6 +128,7 @@ public enum Retention {
             ("system_minute", "bucket"),
             ("process_hour", "bucket"),
             ("system_hour", "bucket"),
+            ("battery_daily", "day"),
         ]
         for tier in tiers {
             try db.execute(
@@ -166,6 +167,7 @@ public enum Retention {
             ("system_minute", "bucket"),
             ("process_hour", "bucket"),
             ("system_hour", "bucket"),
+            ("battery_daily", "day"),
         ]
         let batch = 10_000
         let maxDeletePerPass = 500_000
@@ -415,6 +417,9 @@ public enum Retention {
                   swap_activity_seconds = excluded.swap_activity_seconds
                 """, arguments: [watermark, completeUpTo])
 
+        try SampleStore.rollBatteryHistory(
+            db, source: "system_samples", destination: "system_minute", bucket: b,
+            since: watermark, until: completeUpTo)
         try setMeta(db, "minute_watermark", completeUpTo)
     }
 
@@ -655,6 +660,9 @@ public enum Retention {
                   swap_activity_seconds = excluded.swap_activity_seconds
                 """, arguments: [watermark, completeUpTo])
 
+        try SampleStore.rollBatteryHistory(
+            db, source: "system_minute", destination: "system_hour", bucket: 3600,
+            since: watermark, until: completeUpTo)
         try setMeta(db, "hour_watermark", completeUpTo)
     }
 

@@ -7,6 +7,54 @@ import XCTest
 
 @MainActor
 final class DashboardChartTests: XCTestCase {
+    func testUptimeUsesElapsedTimeSinceBoot() {
+        let boot = Date(timeIntervalSince1970: 1_700_000_000)
+        for (elapsed, expected) in [
+            (0.0, "0m"), (59, "0m"), (60, "1m"), (3599, "59m"),
+            (3600, "1h 0m"), (86400, "1d 0h 0m"), (183840, "2d 3h 4m"),
+        ] {
+            XCTAssertEqual(
+                DashboardUptime.value(since: boot, now: boot.addingTimeInterval(elapsed)), expected)
+        }
+    }
+
+    func testUnavailableOrInvalidBootTimeDoesNotInventUptime() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertEqual(DashboardUptime.value(since: nil, now: now), t("Not reported"))
+        XCTAssertEqual(
+            DashboardUptime.value(since: now.addingTimeInterval(1), now: now), t("Not reported"))
+        XCTAssertEqual(
+            DashboardUptime.value(since: Date(timeIntervalSince1970: -.infinity), now: now),
+            t("Not reported"))
+    }
+
+    func testSystemBootTimeComesFromBeforeTheAppLaunch() throws {
+        let beforeRead = Date()
+        let boot = try XCTUnwrap(SystemBootTime.read())
+        XCTAssertLessThanOrEqual(boot, beforeRead)
+        XCTAssertGreaterThan(boot.timeIntervalSince1970, 0)
+        XCTAssertEqual(SystemBootTime.read(), boot)
+        XCTAssertNotEqual(DashboardUptime.value(since: boot, now: beforeRead), t("Not reported"))
+    }
+
+    func testDashboardUptimeFitsCompactAndWideHeaders() async throws {
+        let options = ChartBenchmark.Options(arguments: ["--points", "60"])
+        let store = ChartBenchmark.ProcessScenarioStore(options: options)
+        store.tick()
+        for (width, appearance) in [(860.0, NSAppearance.Name.aqua), (1440.0, .darkAqua)] {
+            try await capture(
+                ChartBenchmark.DashboardPageScenario(store: store, width: width),
+                size: CGSize(width: width, height: 1000), name: "dashboard-uptime-\(Int(width))",
+                appearance: appearance)
+        }
+        try await capture(
+            DashboardUptime(bootTime: Date().addingTimeInterval(-3_640_440)),
+            size: CGSize(width: 220, height: 34), name: "uptime-long-running")
+        try await capture(
+            DashboardUptime(bootTime: nil), size: CGSize(width: 220, height: 34),
+            name: "uptime-unavailable")
+    }
+
     func testStandardIntervalsAreIndependentOfViewSize() async {
         for (span, expected) in [
             (300.0, 5.0), (1800, 15), (3600, 30), (21600, 300), (86400, 900), (604800, 7200),
@@ -285,12 +333,13 @@ final class DashboardChartTests: XCTestCase {
                 TrendStatisticsCaption(model: model)
                 TrendStatisticsSummary(model: model)
             }.padding(20)
-            try capture(view, size: CGSize(width: 940, height: 350), name: "processor-\(Int(span))")
+            try await capture(
+                view, size: CGSize(width: 940, height: 350), name: "processor-\(Int(span))")
             if span >= 21600 {
-                try capture(
+                try await capture(
                     view, size: CGSize(width: 940, height: 350),
                     name: "processor-\(Int(span))-light", appearance: .aqua)
-                try capture(
+                try await capture(
                     TrendSnapshotChart(model: burstFixture(span: span, legacyBounds: true)),
                     size: CGSize(width: 256, height: 140), name: "legacy-rail-\(Int(span))")
             }
@@ -302,17 +351,17 @@ final class DashboardChartTests: XCTestCase {
                     times: [0, 300, 600, 900, 1200, 1799], values: [40, 45, .nan, 48, 50, 52]),
                 color: .red, name: "GPU die"))
         compact.yFormat = { String(format: "%.1f C", $0) }
-        try capture(
+        try await capture(
             TrendSnapshotChart(model: compact), size: CGSize(width: 256, height: 140),
             name: "rail-chart")
-        try capture(
+        try await capture(
             TrendHoverView(model: compact, time: 610), size: CGSize(width: 330, height: 310),
             name: "hover-missing-gpu")
         let snapshot = DashboardDetailSnapshot(
             kind: .processor, range: .thirtyMinutes,
             capturedAt: Date(timeIntervalSinceReferenceDate: 1800), dataTimestamp: nil,
             content: .trend(fixture(span: 1800)), facts: [])
-        try capture(
+        try await capture(
             DashboardDetailSheet(snapshot: snapshot), size: CGSize(width: 860, height: 780),
             name: "processor-detail")
     }
@@ -405,13 +454,15 @@ final class DashboardChartTests: XCTestCase {
     private func capture<Content: View>(
         _ content: Content, size: CGSize, name: String,
         appearance: NSAppearance.Name = .darkAqua
-    ) throws {
+    ) async throws {
         _ = NSApplication.shared
+        let appeared = expectation(description: "The native preview is mounted")
         let view = NSHostingView(
             rootView:
                 content
                 .frame(width: size.width, height: size.height, alignment: .top)
-                .background(Color(nsColor: .windowBackgroundColor)))
+                .background(Color(nsColor: .windowBackgroundColor))
+                .onAppear { DispatchQueue.main.async { appeared.fulfill() } })
         view.sizingOptions = []
         let window = NSWindow(
             contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless,
@@ -420,6 +471,9 @@ final class DashboardChartTests: XCTestCase {
         window.appearance = NSAppearance(named: appearance)
         window.contentView = view
         view.frame = CGRect(origin: .zero, size: size)
+        window.orderFront(nil)
+        defer { window.close() }
+        await fulfillment(of: [appeared], timeout: 5)
         view.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         func displayLayers(_ layer: CALayer) {
@@ -431,7 +485,6 @@ final class DashboardChartTests: XCTestCase {
         let image = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: image)
         try save(image.cgImage, name: name)
-        window.close()
     }
 
     private func save(_ image: CGImage?, name: String) throws {

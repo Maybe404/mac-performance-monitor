@@ -15,6 +15,7 @@ struct BatteryView: View {
     @EnvironmentObject private var appState: AppState
 
     @StateObject private var accessories = AccessoryBatteryModel.shared
+    @StateObject private var energyHistory = EnergyHistoryModel()
     @State private var range: HistoryWindow = .oneHour
     @State private var history: [SystemHistoryPoint] = []
     /// The downsampled timeline + live point, computed once whenever the source
@@ -67,7 +68,10 @@ struct BatteryView: View {
         // Refresh only the live right-edge point as each new sample lands, so the
         // chart tracks the current tick without re-querying the whole window.
         .onReceive(model.liveTick) { _ in
-            if appState.mainWindowVisible { rebuildPoints() }
+            if appState.mainWindowVisible {
+                rebuildPoints()
+                energyHistory.append(currentBattery, range: range)
+            }
         }
         .onChange(of: appState.mainWindowVisible) { _, visible in
             if visible {
@@ -100,6 +104,8 @@ struct BatteryView: View {
     private var desktopEnergyContent: some View {
         MainRailLayout {
             pageHeader(subtitle: t("on power adapter"))
+            EnergyMetricCards(
+                history: energyHistory, battery: desktopSample, window: range, sampler: model)
             desktopEnergyFlowPanel
             thermalPanel
             topEnergyPanel
@@ -229,87 +235,7 @@ struct BatteryView: View {
     // MARK: - Headline numbers
 
     private func headlineNumbers(_ battery: BatterySample) -> some View {
-        MetricCardsRow(
-            cards: batteryCards(battery), xDomain: chartDomain, loading: awaitingData)
-    }
-
-    private func batteryCards(_ battery: BatterySample) -> [MetricCardData] {
-        let level = BatteryLevel(percent: battery.chargePercent)
-        // Every sample: the card strip and the detail sheet reduce at draw
-        // time, like every other chart (docs/chart-rules.md, rule 1).
-        func samples(_ value: @escaping (SystemHistoryPoint) -> Double) -> [MetricSample] {
-            points.map { MetricSample(date: $0.date, value: value($0)) }
-        }
-        var cards: [MetricCardData] = [
-            MetricCardData(
-                label: t("Charge"),
-                value: BatteryFormat.percent(battery.chargePercent),
-                tint: level.color,
-                samples: samples { $0.batteryCharge },
-                unit: .percent,
-                detail: battery.isCharging ? t("charging") : nil),
-            MetricCardData(
-                label: t("Power"),
-                value: BatteryFormat.watts(battery.powerWatts),
-                tint: .yellow,
-                samples: samples { $0.batteryPowerWatts },
-                unit: .watts,
-                detail: battery.isCharging ? t("in") : t("out")),
-            MetricCardData(
-                label: t("Health"),
-                value: battery.healthPercent.map { BatteryFormat.percent($0) } ?? "—",
-                tint: healthColor(battery.healthPercent),
-                // Health is a slow wear metric, so show a capacity gauge (with the
-                // 80% service threshold) rather than a near-flat sparkline.
-                gauge: battery.healthPercent.map {
-                    MetricGauge(fraction: $0 / 100, threshold: 0.8)
-                },
-                unit: .percent,
-                help:
-                    t(
-                        "Today's full-charge capacity vs the original design. Apple suggests service below 80% (the tick)."
-                    )
-            ),
-            MetricCardData(
-                label: t("Time remaining"),
-                value: timeRemainingValue(battery),
-                tint: .primary),
-            MetricCardData(
-                label: t("Cycles"),
-                value: battery.cycleCount.map { "\($0)" } ?? "—",
-                tint: cycleColor(battery.cycleCount),
-                // Apple silicon batteries are rated for 1,000 cycles, so read the
-                // count against that ceiling as a wear gauge, not a bare number.
-                gauge: battery.cycleCount.map {
-                    MetricGauge(fraction: Double($0) / Double(Self.ratedCycleCount))
-                },
-                detail: battery.cycleCount.map { _ in
-                    t("of %@", Self.ratedCycleCount.formatted())
-                },
-                help:
-                    t(
-                        "Charge cycles used of the %@ this battery is rated for.",
-                        Self.ratedCycleCount.formatted())
-            ),
-        ]
-        if let temp = battery.temperatureCelsius {
-            cards.append(
-                MetricCardData(
-                    label: t("Temperature"),
-                    value: BatteryFormat.celsius(temp),
-                    tint: .teal,
-                    samples: samples { $0.batteryTemperatureCelsius },
-                    unit: .celsius))
-        }
-        return cards
-    }
-
-    private func timeRemainingValue(_ battery: BatterySample) -> String {
-        if battery.isCharging {
-            return BatteryFormat.duration(minutes: battery.timeToFullMinutes)
-        }
-        if battery.isOnAC { return t("On adapter") }
-        return BatteryFormat.duration(minutes: battery.timeToEmptyMinutes)
+        EnergyMetricCards(history: energyHistory, battery: battery, window: range, sampler: model)
     }
 
     // MARK: - Panels
@@ -674,6 +600,7 @@ struct BatteryView: View {
 
     private func reload() {
         let requested = range
+        energyHistory.reload(model, range: requested, battery: currentBattery)
         model.loadSystemHistory(requested) { pts in
             self.history = pts
             self.loadedRange = requested

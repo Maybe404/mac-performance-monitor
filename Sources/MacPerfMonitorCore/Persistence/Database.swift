@@ -228,6 +228,45 @@ public enum MacPerfMonitorDatabase {
                 }
             }
         }
+        migrator.registerMigration("v19-battery-lifetime") { db in
+            try db.execute(
+                sql: """
+                    CREATE TABLE battery_daily (
+                        battery_id TEXT NOT NULL,
+                        day REAL NOT NULL,
+                        observed_at REAL NOT NULL,
+                        health_percent REAL,
+                        cycle_count INTEGER,
+                        full_capacity_mah INTEGER,
+                        design_capacity_mah INTEGER,
+                        PRIMARY KEY (battery_id, day)
+                    );
+                    CREATE INDEX idx_battery_daily_day ON battery_daily(day);
+                    """)
+        }
+        migrator.registerMigration("v20-energy-history") { db in
+            for table in ["system_samples", "system_minute", "system_hour"] {
+                for (column, type) in [
+                    ("energy_battery_id", "TEXT"), ("energy_state", "TEXT"),
+                    ("energy_estimate_source", "TEXT"), ("energy_observed_at", "REAL"),
+                ] {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+                }
+                for metric in [
+                    "charge", "power", "flow", "temperature", "runtime", "full_runtime", "to_full",
+                ] {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN energy_\(metric) REAL")
+                    if table != "system_samples" {
+                        for suffix in ["min", "max", "samples"] {
+                            try db.execute(
+                                sql:
+                                    "ALTER TABLE \(table) ADD COLUMN energy_\(metric)_\(suffix) REAL"
+                            )
+                        }
+                    }
+                }
+            }
+        }
         return migrator
     }
 }

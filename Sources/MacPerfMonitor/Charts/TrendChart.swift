@@ -288,6 +288,7 @@ struct TrendChart: View {
     }
 
     private static func tickFormatter(forStep step: Double) -> DateFormatter {
+        if step >= 28 * 86_400 { return monthTickFormatter }
         if step >= 86_400 { return dayTickFormatter }
         if step >= 60 { return timeTickFormatter }
         return secondsTickFormatter
@@ -317,6 +318,12 @@ struct TrendChart: View {
         fmt.locale = .autoupdatingCurrent
         fmt.setLocalizedDateFormatFromTemplate("MMMd")
         return fmt
+    }()
+    private static let monthTickFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .autoupdatingCurrent
+        formatter.setLocalizedDateFormatFromTemplate("MMMyyyy")
+        return formatter
     }()
     private static let timeTickFormatter: DateFormatter = {
         let fmt = DateFormatter()

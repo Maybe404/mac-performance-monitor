@@ -148,6 +148,7 @@ public final class Sampler {
     private var cachedBattery: BatterySample?
     private var lastBatteryReadAt: Date?
     private let batteryReadInterval: TimeInterval = 5
+    private var batteryRuntimeEstimator = BatteryRuntimeEstimator()
 
     /// GPU registry, IOReport, and SMC reads are carried across subsecond system
     /// ticks. Their values do not benefit from polling above 1 Hz, and each call
@@ -291,6 +292,8 @@ public final class Sampler {
             lastBatteryReadAt.map { now.timeIntervalSince($0) >= batteryReadInterval } ?? true
         if readBattery {
             cachedBattery = batteryReader.read(now: now)
+            let estimate = batteryRuntimeEstimator.update(cachedBattery)
+            cachedBattery?.runtimeEstimate = estimate
             lastBatteryReadAt = now
         }
         let battery = cachedBattery
@@ -776,6 +779,7 @@ public final class Sampler {
         lastPressureLoad = nil
         lastCoreTicks = nil
         cachedBattery = nil
+        batteryRuntimeEstimator = BatteryRuntimeEstimator()
         lastBatteryReadAt = nil
         cachedGPU = nil
         cachedThermal = nil

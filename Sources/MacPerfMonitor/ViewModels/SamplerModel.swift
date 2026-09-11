@@ -1309,7 +1309,8 @@ final class SamplerModel: ObservableObject {
                     // bucket must equal retention's standard-res bucket so every
                     // process still has a raw row in every minute bucket.
                     try persistStore.insertChanged(
-                        system, processes: result.processes, bucket: persistBucket)
+                        system, processes: result.processes, bucket: persistBucket, battery: battery
+                    )
                 } catch {
                     AppLog.sampler.error(
                         "sample insert failed: \(String(describing: error), privacy: .public)")
@@ -2208,6 +2209,33 @@ final class SamplerModel: ObservableObject {
     /// `loadSystemHistory` answers from this instead, so the real Dashboard
     /// page can be measured with a full window rather than an empty one.
     var benchmarkSystemHistory: [SystemHistoryPoint]?
+
+    func loadBatteryHistory(
+        _ window: HistoryWindow, now: Date = Date(),
+        completion: @escaping (Result<[BatteryHistoryPoint], Error>) -> Void
+    ) {
+        guard let store else {
+            completion(.success([]))
+            return
+        }
+        readQueue.async {
+            let result = Result { try store.batteryHistory(window, now: now) }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    func loadBatteryDailyHistory(
+        for identifier: String, completion: @escaping (Result<[BatteryDailyPoint], Error>) -> Void
+    ) {
+        guard let store else {
+            completion(.success([]))
+            return
+        }
+        readQueue.async {
+            let result = Result { try store.batteryDailyHistory(for: identifier) }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
 
     func loadSystemHistory(
         _ window: HistoryWindow,

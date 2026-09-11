@@ -8,6 +8,9 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ### Added
 
+- The Dashboard now shows uptime beneath the machine details, with the boot
+  date on hover. It measures time since the Mac restarted, including sleep,
+  and refreshes once a minute.
 - Energy now has an Accessories panel for battery levels from mice, keyboards,
   AirPods, and other devices. It shows the left earbud, right earbud, and case
   when macOS reports them. A charging icon appears only when that state is known.
@@ -24,6 +27,22 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ### Changed
 
+- All six Energy cards now open a snapshot with a larger chart and an
+  explanation. Charge, runtime, Mac power draw, and battery temperature
+  use the page's time range. Choose a different range in a pop-out without
+  changing the page. Charge and runtime also offer "Since unplugging" when
+  the app saw the switch to battery power.
+- Health and Cycles now have their own month and year ranges, with daily
+  records for each battery pack. These records survive the usual 90-day limit,
+  but still count toward the database size cap. Trends grow from real readings
+  with history logging enabled; missing older data stays missing.
+- Runtime uses the macOS estimate first, or recent use after at least three
+  minutes of steady discharge. Past estimates stay as recorded. A separate
+  dashed line forecasts charge at the same rate of use; it is not saved as
+  a real reading.
+- Mac power draw and signed battery flow are distinct. Card headings wrap
+  and secondary values sit below the main figure so they fit narrow windows.
+  See the [Energy guide](docs/energy-design.md) for ranges and storage limits.
 - Process detail and Explorer charts can include earlier, non-overlapping
   instances of the same program. Restart boundaries break the chart lines and
   disk-rate calculations; concurrent instances are not added together.
