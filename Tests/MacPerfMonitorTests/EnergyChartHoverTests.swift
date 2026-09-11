@@ -461,11 +461,15 @@ final class EnergyChartHoverTests: XCTestCase {
             return BatteryHistoryPoint(sample: sample)
         }
         battery.timestamp = now
-        let daily = (0...400).map { index in
-            BatteryDailyPoint(
-                date: now.addingTimeInterval(Double(index - 400) * 86_400),
-                healthPercent: 100 - Double(index) / 50,
-                cycleCount: 31 + index / 2, fullCapacitymAh: 6000 - index, designCapacitymAh: 6000)
+        let daily = (0...400).map { index -> BatteryDailyPoint in
+            let elapsed: TimeInterval = Double(index - 400) * 86_400
+            let date = now.addingTimeInterval(elapsed)
+            let healthPercent: Double = 100 - Double(index) / 50
+            let cycleCount: Int = 31 + index / 2
+            let fullCapacitymAh: Int = 6000 - index
+            return BatteryDailyPoint(
+                date: date, healthPercent: healthPercent, cycleCount: cycleCount,
+                fullCapacitymAh: fullCapacitymAh, designCapacitymAh: 6000)
         }
         return (battery, history, daily)
     }
