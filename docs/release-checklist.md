@@ -4,7 +4,8 @@
 
 The maintainer approved publishing 2.1.0 from `main` on 11 September 2026.
 The release build is 236; the prior public release is 2.0.0, build 231.
-Keep the production feed unchanged until the draft downloads pass verification.
+The draft downloads passed verification before the production feed changed.
+The release became the latest stable version at 12:31:46 UTC on 11 September 2026.
 
 ### Source And Build
 
@@ -41,21 +42,28 @@ Keep the production feed unchanged until the draft downloads pass verification.
   private history backup passes SQLite integrity checks. This is a smoke test,
   not an end-to-end Sparkle UI upgrade or an extended soak.
 
-- [ ] Push the final source and build metadata. Confirm green CI and a clean
-  worktree at the exact commit used for the release tag.
+- [x] Push the final source and build metadata at
+  `3922772545fa38d1325f73efd218c393f2b654ff`. The worktree was clean and
+  [release CI](https://github.com/Zesty0wl/mac-performance-monitor/actions/runs/34598750928)
+  passed every gate in 5m40s on that exact commit.
 
 ### Publication
 
-- [ ] Create a new annotated tag at the verified commit. Do not move an old tag.
+- [x] Create the annotated tag `v2.1.0.236` at the verified commit above.
+  The remote tag resolves to that commit; no old tag moved.
 
-- [ ] Create a draft release with that tag and the signed ZIP, package, and feed.
-  Download the draft assets and compare their hashes before publishing.
+- [x] Create a draft with that tag and the signed ZIP, package, and feed.
+  Downloaded draft assets match the local files byte-for-byte. The downloaded
+  ZIP passes Ed25519 verification with the public key from 2.0.0.
 
-- [ ] Publish as the latest stable release. Verify public downloads return the
-  same bytes and the latest Sparkle feed names 2.1.0 build 236.
+- [x] Publish [2.1.0 build 236](https://github.com/Zesty0wl/mac-performance-monitor/releases/tag/v2.1.0.236)
+  as the latest stable release. The public installer, archive, and latest feed
+  return HTTP 200 and match the verified files. The feed names build 236,
+  keeps the macOS 15 and arm64 limits, and includes the release notes.
 
-- [ ] Update the repository cask with the exact published package checksum.
-  Record the release commit, CI result, notary IDs, and artifact hashes here.
+- [x] Update the repository cask with the exact public package checksum.
+  Ruby syntax, checksum comparison, and Homebrew style checks pass.
+  Homebrew's separate public cask can lag this update; it does not control Sparkle.
 
 ### Manual Coverage
 
@@ -69,7 +77,7 @@ need checks across real workloads. Synthetic daily data is not a year-long soak.
 Apple accepted the app submission `4718bd42-2410-4100-9245-926cff280076`
 and the package submission `473b14b1-bd46-4244-96f7-a52cfe359022`.
 Both use Apple team `8352865GK4`. The existing Sparkle key is unchanged.
-These are the exact local artifacts reserved for the draft upload:
+These hashes match the local artifacts, draft downloads, and public downloads:
 
 ```text
 MacPerformanceMonitor.pkg
