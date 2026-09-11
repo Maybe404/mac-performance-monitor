@@ -6,6 +6,30 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Energy now has an Accessories panel for battery levels from mice, keyboards,
+  AirPods, and other devices. It shows the left earbud, right earbud, and case
+  when macOS reports them. A charging icon appears only when that state is known.
+  The app checks at most once a minute. With battery alerts off, checks stop
+  when Energy is hidden. Missing values stay unknown. If a read fails, the card
+  marks older values as last reported.
+  The command has time and size limits. An unreadable report shows as unavailable.
+- Low accessory battery alerts are now an opt-in under Settings > Alerts.
+  Choose a level from 5% to 50%; the default is 20%. Two low reports confirm
+  the warning. AirPods parts share one quiet notice, which opens Energy.
+  The app remembers notices across restarts and waits for charge to recover
+  before sending another. Enabled alerts keep the same minute-limited reader
+  active while the app is running, even with Energy hidden.
+
+### Changed
+
+- Process detail and Explorer charts can include earlier, non-overlapping
+  instances of the same program. Restart boundaries break the chart lines and
+  disk-rate calculations; concurrent instances are not added together.
+- Accessory percentages match the Dashboard card fonts. Long battery
+  manufacturer names truncate at the end instead of in the middle.
+
 ## [2.0.0] - 2026-09-10
 
 See the [release notes](RELEASE_NOTES.md) for the short overview.

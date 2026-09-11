@@ -387,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
     let languageManager = AppLanguageManager()
     let alertSettings = AlertSettings()
     let alertCenter = AlertCenter()
+    let accessoryBatteries = AccessoryBatteryModel.shared
     let appState = AppState()
     let onboarding = OnboardingState()
     let helperManager = HelperManager()
@@ -482,9 +483,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         alertCenter.onDeliveryOutcome = { [weak model] ids, outcome, attemptedAt in
             model?.recordAlertDelivery(ids, outcome: outcome, attemptedAt: attemptedAt)
         }
+        accessoryBatteries.onLowBatteryAlert = { [alertCenter] alert, completion in
+            alertCenter.deliverAccessoryBattery(alert, completion: completion)
+        }
         model.setAlertConfig(alertSettings.config)
         alertSettings.$config
-            .sink { [weak model] config in model?.setAlertConfig(config) }
+            .sink { [weak model, accessoryBatteries] config in
+                model?.setAlertConfig(config)
+                accessoryBatteries.configureAlerts(config)
+            }
             .store(in: &cancellables)
 
         // Track the main window's lifecycle so its heavy content is mounted only
@@ -857,7 +864,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let investigation = AlertUserInfo.investigation(from: userInfo) {
+        if AlertUserInfo.opensEnergy(from: userInfo) {
+            appState.alertInvestigation = nil
+            appState.navigationTarget = nil
+            appState.requestedMainTab = .battery
+        } else if let investigation = AlertUserInfo.investigation(from: userInfo) {
             appState.alertInvestigation = investigation
             appState.requestedMainTab = .analytics
         } else if let identity = AlertUserInfo.identity(from: userInfo) {

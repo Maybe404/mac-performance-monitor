@@ -3,7 +3,7 @@
 Implemented on 10 September 2026, following the
 [alerting audit](alerting-audit-2026-09-10.md).
 
-Alerts now track a spell of trouble, not a single high reading. Stable swap
+Performance alerts track a spell of trouble, not a single high reading. Stable swap
 usage alone does not trigger a warning. New notices show what grew, how fast,
 and why it matters. They keep the time the issue began separate from the last
 reading.
@@ -128,6 +128,36 @@ Settings. It keeps swap and process-growth findings in Observations. It leaves
 the user's critical-pressure, CPU/GPU, thermal, and explicit-budget choices
 unchanged. The option is off by default.
 
+## Accessory Batteries
+
+**Low accessory battery** is an opt-in under Settings > Alerts, off by default.
+The starting level is 20%. You can choose 5% to 50% in steps of 5%.
+These quiet battery notices are separate from the performance incidents in
+the red alert badge. Clicking a battery notice opens Energy.
+
+The reader checks at most once a minute while the app is running. With alerts
+off, it runs only while Energy is visible. With alerts on, it also runs when
+Energy is hidden. Both uses share one reader and the same time limit. Tab
+changes, waking the Mac, and failed reads cannot trigger faster checks.
+
+A warning needs two valid low reports, at least a minute apart, for the same
+battery part. A failed read, missing device, or long pause starts that check
+again. Unknown levels, known charging parts, and devices reported as
+disconnected do not trigger a warning. Devices without a stable identifier
+can still appear in the card, but cannot send notices.
+
+Low parts of one device share one notice. The app saves that device's alert
+state in local preferences so it stays quiet across app restarts. It allows
+another notice only after the reported parts recover at least five percentage
+points above the warning level. Missing parts, failed reads, and disconnects
+do not count as recovery. Failed notification scheduling can retry after
+another pair of low reports. System notification permissions still apply.
+
+macOS may return cached levels without a measurement time. A repeated report
+is not proof of a fresh device measurement. Notices say what macOS reports;
+they do not claim a measured runtime or remaining battery life. The card's
+checked time is when the app read the report, not when the device measured it.
+
 ## Local Evidence
 
 The app keeps incident state even when full history is off. It stores two files
@@ -179,6 +209,12 @@ Run focused checks:
 
 ```sh
 swift test --filter 'Alert.*Tests|AdaptiveAlertEngineTests|Swap.*Tests|ProcessGrowthMonitorTests|LeakDetectorTests|LeakBoardTests'
+```
+
+Check accessory battery rules, saved settings, and background polling:
+
+```sh
+swift test --filter 'AccessoryBattery.*Tests|AlertNotificationTests'
 ```
 
 Replay retained history without writes or notifications:

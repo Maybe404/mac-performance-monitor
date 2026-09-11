@@ -5,6 +5,32 @@ import XCTest
 @testable import MacPerfMonitor
 
 final class AlertNotificationTests: XCTestCase {
+    func testAccessoryNoticeIsQuietGroupedAndOpensEnergy() throws {
+        let device = AccessoryBattery(
+            id: "group:private-device-id", name: "AirPods Pro", kind: .headphones,
+            parts: [
+                .init(component: .left, percent: 10, isCharging: false),
+                .init(component: .right, percent: 15, isCharging: false),
+                .init(component: .chargingCase, percent: 90, isCharging: false),
+            ])
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        var tracker = AccessoryBatteryAlertTracker()
+        _ = tracker.evaluate([device], now: now)
+        let alert = try XCTUnwrap(tracker.evaluate([device], now: now.addingTimeInterval(60)).first)
+        let request = try XCTUnwrap(AccessoryBatteryNotification.request(for: alert))
+        XCTAssertEqual(request.content.title, "Low battery: AirPods Pro")
+        XCTAssertEqual(request.content.body, "macOS reports Left: 10%, Right: 15%.")
+        XCTAssertNil(request.content.sound)
+        XCTAssertNil(request.trigger)
+        XCTAssertTrue(AlertUserInfo.opensEnergy(from: request.content.userInfo))
+        XCTAssertNil(AlertUserInfo.investigation(from: request.content.userInfo))
+        XCTAssertNil(AlertUserInfo.identity(from: request.content.userInfo))
+        XCTAssertFalse(request.identifier.contains(device.id))
+        XCTAssertEqual(
+            request.identifier, AccessoryBatteryNotification.request(for: alert)?.identifier)
+        XCTAssertFalse(AlertUserInfo.opensEnergy(from: [:]))
+    }
+
     func testRelatedMemoryAlertsShareOneNoticeAndCarryTheEvidenceWindow() throws {
         let time = Date(timeIntervalSince1970: 1_700_000_000)
         let identity = ProcessIdentity(pid: 100, startTime: time.addingTimeInterval(-600))

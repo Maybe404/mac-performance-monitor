@@ -26,10 +26,11 @@ public struct AlertConfig: Sendable, Equatable, Codable {
     /// Off by default: fanless Macs throttle routinely under real work.
     public var thermalEnabled: Bool
     public var observeGrowthOnly: Bool
+    public var accessoryBatteryEnabled: Bool
+    public var accessoryBatteryThresholdPercent: Int
 
-    /// Whether any alert at all is switched on. When nothing is, there is no
-    /// reason to evaluate, which is what lets the sampler skip the work on a
-    /// tick that has nothing else to do.
+    /// Whether any sampler-driven alert is switched on. Accessory batteries
+    /// use a separate minute-limited reader, not the system sampling tick.
     public var anyEnabled: Bool {
         criticalPressureEnabled || swapEnabled || processCeilingEnabled || leakEnabled
             || highCPUEnabled || highGPUEnabled || thermalEnabled
@@ -47,7 +48,9 @@ public struct AlertConfig: Sendable, Equatable, Codable {
         highGPUEnabled: Bool = false,
         highGPUThresholdPercent: Int = 85,
         thermalEnabled: Bool = false,
-        observeGrowthOnly: Bool = false
+        observeGrowthOnly: Bool = false,
+        accessoryBatteryEnabled: Bool = false,
+        accessoryBatteryThresholdPercent: Int = 20
     ) {
         self.criticalPressureEnabled = criticalPressureEnabled
         self.swapEnabled = swapEnabled
@@ -61,6 +64,8 @@ public struct AlertConfig: Sendable, Equatable, Codable {
         self.highGPUThresholdPercent = highGPUThresholdPercent
         self.thermalEnabled = thermalEnabled
         self.observeGrowthOnly = observeGrowthOnly
+        self.accessoryBatteryEnabled = accessoryBatteryEnabled
+        self.accessoryBatteryThresholdPercent = min(50, max(5, accessoryBatteryThresholdPercent))
     }
 
     /// Decode every field with a default so a config saved by an older build
@@ -95,6 +100,12 @@ public struct AlertConfig: Sendable, Equatable, Codable {
         thermalEnabled =
             try c.decodeIfPresent(Bool.self, forKey: .thermalEnabled) ?? d.thermalEnabled
         observeGrowthOnly = try c.decodeIfPresent(Bool.self, forKey: .observeGrowthOnly) ?? false
+        accessoryBatteryEnabled =
+            try c.decodeIfPresent(Bool.self, forKey: .accessoryBatteryEnabled) ?? false
+        accessoryBatteryThresholdPercent = min(
+            50,
+            max(5, try c.decodeIfPresent(Int.self, forKey: .accessoryBatteryThresholdPercent) ?? 20)
+        )
     }
 
     public static let `default` = AlertConfig()

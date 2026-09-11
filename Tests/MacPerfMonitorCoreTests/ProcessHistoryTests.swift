@@ -88,6 +88,48 @@ final class ProcessHistoryTests: XCTestCase {
         XCTAssertEqual(points.first?.footprint, 110 * 1024 * 1024)
     }
 
+    func testProcessLineageHistoryStitchesRestartsButNotConcurrentInstances() throws {
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        let oldStart = base.addingTimeInterval(-20)
+        let newStart = base.addingTimeInterval(9)
+
+        for (offset, footprint) in [(0.0, 100), (2.0, 110)] {
+            let timestamp = base.addingTimeInterval(offset)
+            try store.insert(
+                Make.system(timestamp: timestamp),
+                processes: [
+                    Make.process(
+                        timestamp: timestamp, pid: 100, startTime: oldStart, name: "Agent",
+                        footprint: UInt64(footprint) * 1024 * 1024)
+                ])
+        }
+        for (offset, footprint) in [(10.0, 200), (12.0, 210)] {
+            let timestamp = base.addingTimeInterval(offset)
+            try store.insert(
+                Make.system(timestamp: timestamp),
+                processes: [
+                    Make.process(
+                        timestamp: timestamp, pid: 200, startTime: newStart, name: "Agent",
+                        footprint: UInt64(footprint) * 1024 * 1024),
+                    Make.process(
+                        timestamp: timestamp, pid: 201, startTime: newStart, name: "Agent",
+                        footprint: 900 * 1024 * 1024),
+                ])
+        }
+
+        let selected = ProcessIdentity(pid: 200, startTime: newStart)
+        let points = try store.processLineageHistory(
+            for: selected, window: .oneHour, now: base.addingTimeInterval(12))
+
+        XCTAssertEqual(
+            points.map(\.footprint), [100, 110, 200, 210].map { UInt64($0) * 1024 * 1024 })
+        XCTAssertEqual(points.map(\.startsNewRun), [false, false, true, false])
+
+        let exact = try store.processHistory(
+            for: selected, window: .oneHour, now: base.addingTimeInterval(12))
+        XCTAssertEqual(exact.map(\.footprint), [200, 210].map { UInt64($0) * 1024 * 1024 })
+    }
+
     func testSubsetInsertWritesOnlyGivenProcesses() throws {
         let ts = Date(timeIntervalSince1970: 1_700_000_000)
         let kept = Make.process(

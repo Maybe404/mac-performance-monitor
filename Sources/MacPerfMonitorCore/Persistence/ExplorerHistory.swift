@@ -102,6 +102,7 @@ public struct ExplorerProcessPoint: Sendable, Equatable {
     public var values: [ExplorerProcessMetric: Double]
     public var minima: [ExplorerProcessMetric: Double]
     public var maxima: [ExplorerProcessMetric: Double]
+    public var startsNewRun: Bool
 
     public init(sample: ProcessSample) {
         date = sample.timestamp
@@ -123,6 +124,7 @@ public struct ExplorerProcessPoint: Sendable, Equatable {
         values[.gpu] = sample.gpuPercent
         minima = values
         maxima = values
+        startsNewRun = false
     }
 
     fileprivate init(row: Row, duration: TimeInterval) {
@@ -132,6 +134,7 @@ public struct ExplorerProcessPoint: Sendable, Equatable {
         values = [:]
         minima = [:]
         maxima = [:]
+        startsNewRun = false
         for metric in ExplorerProcessMetric.allCases {
             func value(_ column: String?) -> Double? {
                 guard let column else { return nil }
@@ -389,47 +392,58 @@ extension SampleStore {
                         db, sql: "SELECT * FROM processes WHERE pid = ? AND start_time = ?",
                         arguments: [identity.pid, identity.startTime.timeIntervalSince1970])
                 else { continue }
-                let processID: Int64 = row["id"]
-                var points: [ExplorerProcessPoint] = []
-                var lower =
+                let paddedFrom =
                     from.timeIntervalSince1970
                     - (granularity == .hour ? 3600 : (granularity == .minute ? minuteWidth : 0))
                 let upper = to.timeIntervalSince1970
-                func read(_ table: String, duration: Double, until: Double) throws {
-                    guard lower <= until else { return }
-                    let timeColumn = duration == 0 ? "timestamp" : "bucket"
-                    let sourceDuration =
-                        table == "process_minute"
-                        ? "COALESCE((SELECT bucket_seconds FROM system_minute WHERE bucket = source.bucket), \(duration))"
-                        : String(duration)
-                    let rows = try Row.fetchAll(
-                        db,
-                        sql: """
-                            SELECT source.*, \(sourceDuration) AS explorer_duration FROM \(table) source WHERE process_id = ?
-                              AND \(timeColumn) >= ? AND \(timeColumn) <= ?
-                            ORDER BY \(timeColumn) LIMIT ?
-                            """, arguments: [processID, lower, until, remaining + 1])
-                    guard rows.count <= remaining else {
-                        throw ProcessHistoryReadError.pointLimitExceeded(maximumPointCount)
+                let runs = try Self.processLineageRuns(
+                    db, for: identity, from: paddedFrom, to: upper)
+                var points: [ExplorerProcessPoint] = []
+                for run in runs {
+                    var runPoints: [ExplorerProcessPoint] = []
+                    var lower = paddedFrom
+                    func read(_ table: String, duration: Double, until: Double) throws {
+                        guard lower <= until else { return }
+                        let timeColumn = duration == 0 ? "timestamp" : "bucket"
+                        let sourceDuration =
+                            table == "process_minute"
+                            ? "COALESCE((SELECT bucket_seconds FROM system_minute WHERE bucket = source.bucket), \(duration))"
+                            : String(duration)
+                        let rows = try Row.fetchAll(
+                            db,
+                            sql: """
+                                SELECT source.*, \(sourceDuration) AS explorer_duration FROM \(table) source WHERE process_id = ?
+                                  AND \(timeColumn) >= ? AND \(timeColumn) <= ?
+                                ORDER BY \(timeColumn) LIMIT ?
+                                """, arguments: [run.databaseID, lower, until, remaining + 1])
+                        guard rows.count <= remaining else {
+                            throw ProcessHistoryReadError.pointLimitExceeded(maximumPointCount)
+                        }
+                        remaining -= rows.count
+                        runPoints += rows.map {
+                            ExplorerProcessPoint(row: $0, duration: duration)
+                        }
                     }
-                    remaining -= rows.count
-                    points += rows.map { ExplorerProcessPoint(row: $0, duration: duration) }
-                }
-                if granularity == .hour {
-                    try read(
-                        "process_hour", duration: 3600, until: min(upper, hourWatermark.nextDown))
-                    lower = max(lower, hourWatermark)
-                }
-                if granularity != .raw {
-                    try read(
-                        "process_minute", duration: minuteWidth,
-                        until: min(upper, minuteWatermark.nextDown))
-                    lower = max(lower, minuteWatermark)
-                }
-                try read("process_samples", duration: 0, until: upper)
-                points.removeAll {
-                    $0.date < from
-                        && ($0.duration == 0 || $0.date.addingTimeInterval($0.duration) <= from)
+                    if granularity == .hour {
+                        try read(
+                            "process_hour", duration: 3600,
+                            until: min(upper, hourWatermark.nextDown))
+                        lower = max(lower, hourWatermark)
+                    }
+                    if granularity != .raw {
+                        try read(
+                            "process_minute", duration: minuteWidth,
+                            until: min(upper, minuteWatermark.nextDown))
+                        lower = max(lower, minuteWatermark)
+                    }
+                    try read("process_samples", duration: 0, until: upper)
+                    runPoints.removeAll {
+                        $0.date < from
+                            && ($0.duration == 0
+                                || $0.date.addingTimeInterval($0.duration) <= from)
+                    }
+                    if !points.isEmpty, !runPoints.isEmpty { runPoints[0].startsNewRun = true }
+                    points += runPoints
                 }
                 result.append(
                     ExplorerProcessHistory(process: ExplorerProcess(row: row), points: points))

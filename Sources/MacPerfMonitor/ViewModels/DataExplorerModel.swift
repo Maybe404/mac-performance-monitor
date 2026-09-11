@@ -490,7 +490,16 @@ final class DataExplorerModel: ObservableObject {
         for sample in sampler.latest?.processes ?? [] where identities.contains(sample.id) {
             if let index = histories.firstIndex(where: { $0.process.id == sample.id }) {
                 if sample.timestamp > (histories[index].points.last?.date ?? .distantPast) {
-                    histories[index].points.append(ExplorerProcessPoint(sample: sample))
+                    var point = ExplorerProcessPoint(sample: sample)
+                    let hasCurrentRun = histories[index].points.contains {
+                        $0.startsNewRun || $0.date >= sample.startTime
+                            || ($0.duration > 0
+                                && $0.date.addingTimeInterval($0.duration) > sample.startTime)
+                    }
+                    if !histories[index].points.isEmpty, !hasCurrentRun {
+                        point.startsNewRun = true
+                    }
+                    histories[index].points.append(point)
                     histories[index].points.removeAll { $0.date < domain.lowerBound }
                 }
             } else {
@@ -585,25 +594,7 @@ final class DataExplorerModel: ObservableObject {
                     guard let history = histories.first(where: { $0.process.id == identity }) else {
                         return nil
                     }
-                    let values = ExplorerMetrics.processValues(history.points, metric: metric)
-                    let projected =
-                        metric == .diskRead || metric == .diskWrite || metric == .cpuUser
-                        || metric == .cpuSystem || metric == .energyTotal
-                    let column = LiveColumn(
-                        times: history.points.map { $0.date.timeIntervalSinceReferenceDate }[...],
-                        values: values[...],
-                        highs: history.points.enumerated().map { index, point in
-                            point.duration == 0
-                                ? values[index]
-                                : (projected ? .nan : (point.maxima[metric] ?? .nan))
-                        }[...],
-                        lows: history.points.enumerated().map { index, point in
-                            point.duration == 0
-                                ? values[index]
-                                : (projected ? .nan : (point.minima[metric] ?? .nan))
-                        }[...],
-                        weights: history.points.map { $0.duration == 0 ? 1 : Double.nan }[...],
-                        durations: history.points.map(\.duration)[...])
+                    let column = ExplorerMetrics.processColumn(history.points, metric: metric)
                     return TrendSurfaceSeries(
                         column: column, color: colors[identity] ?? .blue,
                         name: t("%@ · PID %d", history.process.name, identity.pid))

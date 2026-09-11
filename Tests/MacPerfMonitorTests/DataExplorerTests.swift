@@ -259,6 +259,41 @@ final class DataExplorerTests: XCTestCase {
         XCTAssertTrue(values[3].isNaN)
     }
 
+    func testRestartBoundaryCreatesHardGapWithoutDroppingReadings() {
+        var sample = process(pid: 1000, at: Date(timeIntervalSinceReferenceDate: 0))
+        sample.physFootprint = 100
+        sample.diskBytesRead = 100
+        let first = ExplorerProcessPoint(sample: sample)
+        sample.timestamp = Date(timeIntervalSinceReferenceDate: 2)
+        sample.physFootprint = 200
+        sample.diskBytesRead = 1_000
+        var restarted = ExplorerProcessPoint(sample: sample)
+        restarted.startsNewRun = true
+        sample.timestamp = Date(timeIntervalSinceReferenceDate: 4)
+        sample.physFootprint = 210
+        sample.diskBytesRead = 1_200
+        let continued = ExplorerProcessPoint(sample: sample)
+        let points = [first, restarted, continued]
+
+        let column = ExplorerMetrics.processColumn(points, metric: .footprint)
+        XCTAssertEqual(Array(column.values).count, 4)
+        XCTAssertEqual(Array(column.values)[0], 100)
+        XCTAssertTrue(Array(column.values)[1].isNaN)
+        XCTAssertEqual(Array(column.values)[2...], [200, 210])
+
+        let disk = ExplorerMetrics.processValues(points, metric: .diskRead)
+        XCTAssertTrue(disk[1].isNaN, "a restart must not become a cross-process rate")
+        XCTAssertEqual(disk[2], 100)
+
+        let segments = MetricChart.split(
+            [
+                MetricSample(date: sample.timestamp.addingTimeInterval(-4), value: 100),
+                MetricSample(date: sample.timestamp.addingTimeInterval(-3), value: .nan),
+                MetricSample(date: sample.timestamp.addingTimeInterval(-2), value: 200),
+            ], gapThreshold: 150)
+        XCTAssertEqual(segments.map { $0.map(\.value) }, [[100], [200]])
+    }
+
     func testCSVIncludesRawValuesAndEscapesFormulaLikeProcessNames() {
         var model = TrendModel()
         model.xDomain =

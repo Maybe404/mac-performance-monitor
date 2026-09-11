@@ -3,6 +3,33 @@ import XCTest
 @testable import MacPerfMonitorCore
 
 final class AlertEngineTests: XCTestCase {
+    func testAccessoryAlertPreferencesDefaultOffAndSurviveRoundTrip() throws {
+        let legacy = try JSONDecoder().decode(
+            AlertConfig.self,
+            from: Data(#"{"criticalPressureEnabled":false,"leakEnabled":false}"#.utf8))
+        XCTAssertFalse(legacy.accessoryBatteryEnabled)
+        XCTAssertEqual(legacy.accessoryBatteryThresholdPercent, 20)
+        XCTAssertFalse(legacy.criticalPressureEnabled)
+        XCTAssertFalse(legacy.leakEnabled)
+
+        var configured = legacy
+        configured.accessoryBatteryEnabled = true
+        configured.accessoryBatteryThresholdPercent = 15
+        let restored = try JSONDecoder().decode(
+            AlertConfig.self, from: JSONEncoder().encode(configured))
+        XCTAssertEqual(restored, configured)
+        XCTAssertFalse(restored.anyEnabled)
+    }
+
+    func testAccessoryAlertThresholdIsBoundedWhenLoadingSettings() throws {
+        for (saved, expected) in [(-100, 5), (500, 50), (20, 20)] {
+            let data = try JSONSerialization.data(
+                withJSONObject: ["accessoryBatteryThresholdPercent": saved])
+            let config = try JSONDecoder().decode(AlertConfig.self, from: data)
+            XCTAssertEqual(config.accessoryBatteryThresholdPercent, expected)
+        }
+    }
+
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
     private let gb: UInt64 = 1024 * 1024 * 1024
 

@@ -429,7 +429,8 @@ enum ExplorerMetrics {
             guard let value = point.values[metric] else { return .nan }
             switch metric {
             case .diskRead, .diskWrite:
-                guard index > 0, let previous = history[index - 1].values[metric], value >= previous
+                guard !point.startsNewRun, index > 0,
+                    let previous = history[index - 1].values[metric], value >= previous
                 else { return .nan }
                 let elapsed = point.date.timeIntervalSince(history[index - 1].date)
                 guard elapsed > 0, elapsed <= max(120, history[index - 1].duration * 2) else {
@@ -440,5 +441,54 @@ enum ExplorerMetrics {
             default: return value
             }
         }
+    }
+
+    static func processColumn(
+        _ history: [ExplorerProcessPoint], metric: ExplorerProcessMetric
+    ) -> LiveColumn {
+        let values = processValues(history, metric: metric)
+        let projected =
+            metric == .diskRead || metric == .diskWrite || metric == .cpuUser
+            || metric == .cpuSystem || metric == .energyTotal
+        var times: [Double] = []
+        var expandedValues: [Double] = []
+        var highs: [Double] = []
+        var lows: [Double] = []
+        var weights: [Double] = []
+        var durations: [Double] = []
+        let restartCount = history.lazy.filter(\.startsNewRun).count
+        times.reserveCapacity(history.count + restartCount)
+        expandedValues.reserveCapacity(history.count + restartCount)
+        highs.reserveCapacity(history.count + restartCount)
+        lows.reserveCapacity(history.count + restartCount)
+        weights.reserveCapacity(history.count + restartCount)
+        durations.reserveCapacity(history.count + restartCount)
+
+        for (index, point) in history.enumerated() {
+            if index > 0, point.startsNewRun {
+                let previous = history[index - 1].date.timeIntervalSinceReferenceDate
+                let current = point.date.timeIntervalSinceReferenceDate
+                times.append(previous + max(0, current - previous) / 2)
+                expandedValues.append(.nan)
+                highs.append(.nan)
+                lows.append(.nan)
+                weights.append(.nan)
+                durations.append(0)
+            }
+            let value = values[index]
+            times.append(point.date.timeIntervalSinceReferenceDate)
+            expandedValues.append(value)
+            highs.append(
+                point.duration == 0
+                    ? value : (projected ? .nan : (point.maxima[metric] ?? .nan)))
+            lows.append(
+                point.duration == 0
+                    ? value : (projected ? .nan : (point.minima[metric] ?? .nan)))
+            weights.append(point.duration == 0 ? 1 : .nan)
+            durations.append(point.duration)
+        }
+        return LiveColumn(
+            times: times[...], values: expandedValues[...], highs: highs[...], lows: lows[...],
+            weights: weights[...], durations: durations[...])
     }
 }

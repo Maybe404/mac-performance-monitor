@@ -285,7 +285,7 @@ private struct MenuBarDockSettingsView: View {
 /// Every alert, each in its own headed section so the group reads as one set of
 /// related controls (the old layout left four of them headerless). Thresholded
 /// alerts reveal their stepper only when enabled.
-private struct AlertsSettingsView: View {
+struct AlertsSettingsView: View {
     @EnvironmentObject private var alertSettings: AlertSettings
 
     var body: some View {
@@ -384,6 +384,24 @@ private struct AlertsSettingsView: View {
                 )
             } header: {
                 Text("Sustained High GPU")
+            }
+
+            Section {
+                Toggle("Low accessory battery", isOn: $alertSettings.config.accessoryBatteryEnabled)
+                    .accessibilityIdentifier("accessory-battery-alerts")
+                if alertSettings.config.accessoryBatteryEnabled {
+                    percentStepper(
+                        t("Notify at or below"),
+                        percent: $alertSettings.config.accessoryBatteryThresholdPercent,
+                        range: 5...50
+                    )
+                    .accessibilityIdentifier("accessory-battery-threshold")
+                }
+                caption(
+                    "Checks once a minute while the app is running, even with Energy hidden. One quiet alert until charge recovers. macOS may report cached levels."
+                )
+            } header: {
+                Text("Accessory Batteries")
             }
         }
         .formStyle(.grouped)

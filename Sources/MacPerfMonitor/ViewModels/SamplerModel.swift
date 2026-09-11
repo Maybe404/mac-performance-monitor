@@ -2309,6 +2309,24 @@ final class SamplerModel: ObservableObject {
         }
     }
 
+    /// Load chart history for the selected process and its non-overlapping
+    /// predecessors from the same executable. Each restart boundary is marked
+    /// so callers can leave a visual gap without discarding either endpoint.
+    func loadProcessLineageHistory(
+        _ identity: ProcessIdentity,
+        window: HistoryWindow,
+        completion: @escaping ([ProcessHistoryPoint]) -> Void
+    ) {
+        guard let store else {
+            completion([])
+            return
+        }
+        readQueue.async {
+            let points = (try? store.processLineageHistory(for: identity, window: window)) ?? []
+            DispatchQueue.main.async { completion(points) }
+        }
+    }
+
     /// Load only the per-process rows persisted since `after`, off the main
     /// thread, then deliver them on the main thread. The detail view appends
     /// these to the history it already holds, so the charts extend continuously

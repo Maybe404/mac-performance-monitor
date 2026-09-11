@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import MacPerfMonitorCore
 import UserNotifications
@@ -9,6 +10,13 @@ enum AlertUserInfo {
     private static let startKey = "uk.co.bzwrd.macperfmonitor.alert.start"
     private static let preciseStartKey = "uk.co.bzwrd.macperfmonitor.alert.startReference"
     private static let investigationKey = "uk.co.bzwrd.macperfmonitor.alert.investigation"
+    private static let destinationKey = "uk.co.bzwrd.macperfmonitor.alert.destination"
+
+    static var accessoryBatteryPayload: [String: Any] { [destinationKey: "energy"] }
+
+    static func opensEnergy(from userInfo: [AnyHashable: Any]) -> Bool {
+        userInfo[destinationKey] as? String == "energy"
+    }
 
     /// The userInfo payload for an alert, identifying its process when it has
     /// one. System-wide alerts (pressure, swap) carry no identity.
@@ -53,6 +61,34 @@ enum AlertUserInfo {
             request.isValid
         else { return nil }
         return request
+    }
+}
+
+enum AccessoryBatteryNotification {
+    static func request(for alert: AccessoryBatteryAlert) -> UNNotificationRequest? {
+        let readings = alert.parts.compactMap { part -> String? in
+            guard let percent = part.percent, (0...100).contains(percent) else { return nil }
+            let label: String
+            switch part.component {
+            case .battery: label = t("Charge")
+            case .left: label = t("Left")
+            case .right: label = t("Right")
+            case .chargingCase: label = t("Case")
+            }
+            return label + ": " + BatteryFormat.percent(Double(percent))
+        }
+        guard !readings.isEmpty else { return nil }
+        let content = UNMutableNotificationContent()
+        content.title = t("Low battery: %@", String(alert.name.prefix(128)))
+        content.body = t("macOS reports %@.", readings.joined(separator: ", "))
+        content.sound = nil
+        content.threadIdentifier = "accessory-batteries"
+        content.userInfo = AlertUserInfo.accessoryBatteryPayload
+        let identifier = SHA256.hash(data: Data(alert.id.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        return UNNotificationRequest(
+            identifier: "uk.co.bzwrd.macperfmonitor.accessory.\(identifier)",
+            content: content, trigger: nil)
     }
 }
 
@@ -102,6 +138,32 @@ final class AlertCenter {
 
     func deliver(_ alert: Alert) {
         deliver([alert])
+    }
+
+    func deliverAccessoryBattery(
+        _ alert: AccessoryBatteryAlert, completion: @escaping @Sendable (Bool) -> Void
+    ) {
+        guard let center, let request = AccessoryBatteryNotification.request(for: alert) else {
+            completion(false)
+            return
+        }
+        center.getNotificationSettings { settings in
+            guard
+                settings.authorizationStatus == .authorized
+                    || settings.authorizationStatus == .provisional
+            else {
+                completion(false)
+                return
+            }
+            center.add(request) { error in
+                completion(error == nil)
+                if let error {
+                    AppLog.alerts.error(
+                        "accessory notification failed: \(String(describing: error), privacy: .public)"
+                    )
+                }
+            }
+        }
     }
 
     private func deliver(_ batch: AlertNotification) {

@@ -144,6 +144,51 @@ final class ExplorerHistoryTests: XCTestCase {
                 to: start.addingTimeInterval(10), granularity: .raw, maximumPointCount: 0))
     }
 
+    func testProcessExplorerStitchesSequentialInstancesWithoutMergingConcurrentOnes() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("explorer-lineage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try SampleStore(url: directory.appendingPathComponent("history.sqlite"))
+        let start = Date(timeIntervalSince1970: 1_700_000_400)
+        let oldStart = start.addingTimeInterval(-30)
+        let currentStart = start.addingTimeInterval(9)
+
+        for (offset, footprint) in [(0.0, 100.0), (2.0, 110.0)] {
+            let date = start.addingTimeInterval(offset)
+            try store.insert(
+                Make.system(timestamp: date),
+                processes: [
+                    Make.process(
+                        timestamp: date, pid: 100, startTime: oldStart, name: "Agent",
+                        footprint: UInt64(footprint))
+                ])
+        }
+        for (offset, footprint) in [(10.0, 200.0), (12.0, 210.0)] {
+            let date = start.addingTimeInterval(offset)
+            try store.insert(
+                Make.system(timestamp: date),
+                processes: [
+                    Make.process(
+                        timestamp: date, pid: 200, startTime: currentStart, name: "Agent",
+                        footprint: UInt64(footprint)),
+                    Make.process(
+                        timestamp: date, pid: 201, startTime: currentStart, name: "Agent",
+                        footprint: 900),
+                ])
+        }
+
+        let selected = ProcessIdentity(pid: 200, startTime: currentStart)
+        let histories = try store.explorerProcessHistories(
+            identities: [selected], from: start,
+            to: start.addingTimeInterval(12), granularity: .raw)
+        let history = try XCTUnwrap(histories.first)
+
+        XCTAssertEqual(history.process.id, selected)
+        XCTAssertEqual(history.points.compactMap { $0.values[.footprint] }, [100, 110, 200, 210])
+        XCTAssertEqual(history.points.map(\.startsNewRun), [false, false, true, false])
+    }
+
     func testProcessAggregatesLeaveRawOnlyFieldsUnavailable() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("explorer-process-tier-\(UUID().uuidString)", isDirectory: true)

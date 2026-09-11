@@ -136,15 +136,20 @@ struct MetricChart: View, Equatable {
     /// Break a series into contiguous runs wherever two consecutive points are
     /// more than `gapThreshold` apart, so a stretch of missing data is left
     /// blank instead of being joined by a straight line across the hole.
-    private static func split(
+    static func split(
         _ samples: [MetricSample], gapThreshold: TimeInterval
     )
         -> [[MetricSample]]
     {
         guard !samples.isEmpty else { return [] }
         var segments: [[MetricSample]] = []
-        var current: [MetricSample] = [samples[0]]
-        for sample in samples.dropFirst() {
+        var current: [MetricSample] = []
+        for sample in samples {
+            guard sample.value.isFinite else {
+                if !current.isEmpty { segments.append(current) }
+                current.removeAll(keepingCapacity: true)
+                continue
+            }
             if let last = current.last,
                 sample.date.timeIntervalSince(last.date) > gapThreshold
             {
@@ -154,7 +159,7 @@ struct MetricChart: View, Equatable {
                 current.append(sample)
             }
         }
-        segments.append(current)
+        if !current.isEmpty { segments.append(current) }
         return segments
     }
 }
