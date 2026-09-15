@@ -233,6 +233,19 @@ struct MacPerfMonitorApp: App {
         }
         .defaultSize(width: 600, height: 560)
 
+        WindowGroup(id: WindowID.usageTimeline, for: UsageTimelineTarget.self) { $target in
+            if let target {
+                LocaleRootView(languageManager: appDelegate.languageManager) {
+                    UsageTimelineView(
+                        model: UsageTimelineModel(
+                            target: target, loadHistory: appDelegate.model.loadUsageTimeline)
+                    )
+                    .environmentObject(appDelegate.fullDiskAccessManager)
+                }
+            }
+        }
+        .defaultSize(width: 840, height: 700)
+
         // AI deep dive: one window per process. Profiles the target with `sample`
         // (via the helper for protected processes) and has the on-device model
         // explain what it is doing. Gets the helper manager (privileged capture);
@@ -274,6 +287,7 @@ enum WindowID {
     static let onboarding = "onboarding"
     static let inspector = "inspector"
     static let openFiles = "open-files"
+    static let usageTimeline = "usage-timeline"
     static let deepDive = "deep-dive"
 }
 

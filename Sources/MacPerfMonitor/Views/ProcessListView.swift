@@ -392,6 +392,16 @@ private struct ProcessTable: View, Equatable {
                     String(localized: "Open Files & Sockets\u{2026}"), symbol: "doc.on.doc",
                     handler: openFiles))
         }
+        if let sample = live ?? flatten(rows).first(where: { $0.id == id }) {
+            let target = UsageTimelineTarget(sample: sample)
+            menu.addItem(
+                ClosureMenuItem(
+                    String(localized: "Usage Timeline\u{2026}"), symbol: "timeline.selection"
+                ) {
+                    openWindow(value: target)
+                    NSApp.activate(ignoringOtherApps: true)
+                })
+        }
         if let deepDive = deepDiveAction(for: id) {
             menu.addItem(
                 ClosureMenuItem(

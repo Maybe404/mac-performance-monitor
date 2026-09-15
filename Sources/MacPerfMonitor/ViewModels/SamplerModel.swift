@@ -2337,6 +2337,20 @@ final class SamplerModel: ObservableObject {
         }
     }
 
+    func loadUsageTimeline(
+        _ identity: ProcessIdentity, window: HistoryWindow, now: Date,
+        completion: @escaping (Result<UsageTimeline.ObservedHistory, Error>) -> Void
+    ) {
+        guard let store else {
+            completion(.failure(CocoaError(.fileReadUnknown)))
+            return
+        }
+        readQueue.async {
+            let result = Result { try store.usageTimeline(for: identity, window: window, now: now) }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     /// Load chart history for the selected process and its non-overlapping
     /// predecessors from the same executable. Each restart boundary is marked
     /// so callers can leave a visual gap without discarding either endpoint.

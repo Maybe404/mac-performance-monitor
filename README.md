@@ -108,6 +108,10 @@ the window, with a setting to keep it visible.
 
 - **Processes:** sort and filter the process table, inspect memory and CPU
   history, and check file descriptors, disk I/O, and Rosetta status.
+  Right-click a row and choose **Usage Timeline** for sampled running history.
+  Optional Apple app and media activity appears separately, with unverified
+  device and foreground status. It requires Full Disk Access and a per-window
+  opt-in; the app keeps these activity records in memory only.
 
 - **Groups:** collect related apps and helpers into a group and track their
   combined footprint as a share of the Mac's memory.

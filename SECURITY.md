@@ -27,6 +27,14 @@ build. Older releases may not receive the same fixes.
 - No usage telemetry or analytics. With recording on, the app stores full
   performance history in a local SQLite database.
 
+- **Usage Timeline** can read Apple's local activity history. Each window starts
+  with this off, even if the app already has Full Disk Access. Turning it on
+  reads only app-usage and media intervals for the selected app bundle in the
+  current user's account. These rows do not verify the source device or process.
+  The read does not change Apple's database. The app keeps the rows in that
+  window's memory and clears them when switched off or closed. It does not add
+  them to saved performance history, trace exports, or network requests.
+
 - Alert state uses separate local files. They can hold process names, paths,
   IDs, and evidence even with full history off. See
   [Adaptive alerts](docs/adaptive-alerts.md#local-evidence) for the limits.
