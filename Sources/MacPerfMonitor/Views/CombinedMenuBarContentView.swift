@@ -229,6 +229,11 @@ struct CombinedMenuBarContentView: View {
             Spacer()
 
             Menu {
+                Button("Ask About This Mac (Preview)", systemImage: "sparkles") {
+                    dismiss()
+                    WindowOpenBridge.shared.open(id: WindowID.ask)
+                }
+                Divider()
                 Button(
                     LocalizedStringKey(
                         components.historyLogging

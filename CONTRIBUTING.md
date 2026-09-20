@@ -7,8 +7,10 @@ are welcome. Target `main` for new work; it contains the 2.0 release source.
 ## Building and testing
 
 Building and running the tests needs no Apple Developer account or signing key.
-Use Apple silicon, macOS 15 or later, and Swift 6. A full Xcode installation is
-needed to bundle the app: Apple's `xcstringstool` compiles the String Catalog.
+Use Apple silicon and macOS 15 or later. The current preview build uses Xcode 27
+for App Intents metadata and the local-inference worker. Install its GPU compiler
+with `xcodebuild -downloadComponent MetalToolchain`. Apple's `xcstringstool`
+compiles the String Catalog. Model weights are not needed for ordinary tests.
 
 ```sh
 swift build
@@ -40,7 +42,125 @@ replace a manual check of the signed app. See the commands in
 [Explorer](docs/explorer-design.md) and [Adaptive alerts](docs/adaptive-alerts.md)
 for native previews and read-only history replay.
 
+For Ask's ordinary tests, run:
+
+```sh
+swift test --filter 'AskPreviewTests|AskReportTests'
+```
+
+Apple tests need a ready Apple Intelligence model, but no Qwen download.
+They cover routing, answers, and database tools. The smoke test also checks
+memory pressure, disk activity, and missing network data. To run them:
+
+```sh
+MACPERF_TEST_FOUNDATION_MODELS=1 swift test --filter 'AskPreviewTests/testRealApple|AskPreviewTests/testRealOnDeviceRouting'
+```
+
+Qwen tests need an opt-in flag, a test model folder, and a built worker:
+
+```sh
+MACPERF_TEST_QWEN=1 \
+MACPERF_TEST_QWEN_DIRECTORY=/path/to/test-model \
+MACPERF_TEST_INFERENCE_BINARY=/path/to/MacPerfMonitorInference \
+swift test --filter AskPreviewTests/testRealQwen
+```
+
+The download test fetches about 2.3 GB if the test folder has no verified model.
+Use a Mac with at least 16 GiB RAM and normal memory pressure. Run real models
+separately when memory is tight. Do not bypass the pressure gate to pass a test.
+
+To try any downloaded local model without fetching weights, use its backend ID:
+
+```sh
+MACPERF_TEST_LOCAL_BACKEND=qwen35 \
+MACPERF_TEST_LOCAL_MODEL_DIRECTORY=/path/to/downloaded-model \
+MACPERF_TEST_INFERENCE_BINARY=/path/to/MacPerfMonitorInference \
+swift test --filter AskPreviewTests/testRealSelectedLocalModelWhenExplicitlyEnabled
+```
+
+The IDs are `qwen`, `qwen35`, and `deepAnalyze`. Download the selected model from
+Ask settings first, or supply a separate folder with the exact pinned files.
+The test uses synthetic history, not your recorded activity. It checks tool use,
+citations, output limits, and reported memory. Qwen3.5 and DeepAnalyze remain
+experimental; a passing trial is not a broad accuracy score. Run one model at a time.
+The GGUF memory metric is peak resident memory; the MLX metric is peak allocations.
+Do not compare those values as though they measured the same thing.
+
+The real-model investigation tests build a temporary SQLite history with known
+CPU activity. They check that the model requests history and process evidence,
+not just a current snapshot. Ordinary tests exercise the child-process protocol
+with a lightweight fixture, including cancellation and forged citations.
+Inspect the actual diagnosis as well as test status: valid citations alone do
+not show that a model interpreted them correctly.
+
+To replay existing history with Apple, pass its database path:
+
+```sh
+MACPERF_TEST_FOUNDATION_MODELS=1 \
+MACPERF_TEST_ASK_DATABASE="$HOME/Library/Application Support/MacPerformanceMonitor/macperfmonitor.sqlite" \
+swift test --filter AskPreviewTests/testRealAppleReadOnlyLocalHistoryWhenExplicitlyEnabled
+```
+
+For Qwen, use the Qwen flags above and its replay test:
+
+```text
+AskPreviewTests/testRealQwenReadOnlyLocalHistoryWhenExplicitlyEnabled
+```
+
+Both tests open the database read-only and use fresh reports without recording.
+They omit private evidence and answers from their output. Neither downloads a
+model. For Qwen, use a verified model folder and the worker you want to test.
+
+To repeat Qwen's final-answer step on a fixed interval, use the same flags with
+an ISO 8601 date that includes a time zone:
+
+```text
+MACPERF_TEST_ASK_DATE=2026-09-18T09:33:10+01:00
+AskPreviewTests/testRealQwenPinnedAnswerWhenExplicitlyEnabled
+```
+
+This test reads the same recorded interval on each run. It does not take live
+samples or write to history.
+
 ## Linting and formatting
+
+For the ANE accounting preview, run the focused reader, history, and display tests:
+
+```sh
+swift test --filter 'GPUAttributionTests|GPUHistoryTests|MetricCardPresentationTests'
+```
+
+The live sampler test needs macOS 27 and a ready Apple Intelligence model:
+
+```sh
+MACPERF_TEST_FOUNDATION_MODELS=1 swift test --filter GPUAttributionTests/testProductionSamplerReadsANE
+```
+
+Set `MACPERF_ANE_ARTIFACTS` to an output folder to capture the native ANE preview
+windows in the display test. This uses macOS screen capture and needs its usual
+permission. Without the variable, tests use view rendering only. No test writes
+to the user's history. See [ANE activity](docs/gpu-tab-design.md#ane-activity-preview-18-september-2026)
+for units, availability, and coverage limits.
+
+For ANE power, add the helper tests. They use an anonymous XPC listener and
+short-lived fixture processes, so the ordinary suite needs no root privileges:
+
+```sh
+swift test --filter 'HelperRoundTripTests|GPUAttributionTests|GPUHistoryTests|MetricCardPresentationTests'
+```
+
+To replay an existing native plist capture without starting a root sampler:
+
+```sh
+MACPERF_TEST_ANE_CAPTURE=/path/to/powermetrics-capture \
+swift test --filter HelperRoundTripTests/testRealASITopCaptureWhenExplicitlyProvided
+```
+
+The capture must include nonzero ANE energy and use powermetrics' NUL-separated
+plist format. The test prints only sample counts and peak watts. For the live
+signed-app check, install both updated binaries and enable Full Coverage. Check
+that ANE watts appear during inference and become unavailable when coverage is
+off, while ANE Time keeps working. No asitop process should be required.
 
 The project uses the Swift toolchain's built-in formatter, configured by
 [.swift-format](.swift-format). Continuous integration runs it in strict mode,

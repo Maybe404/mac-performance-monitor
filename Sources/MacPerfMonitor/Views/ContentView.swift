@@ -33,7 +33,7 @@ struct ContentView: View {
     /// Lives above `TabGate`, so switching tabs does not discard an open trace.
     /// Closing the main window still unmounts `ContentView` and releases it.
     @State private var importedTrace: ImportedTrace?
-    @State private var explorer = DataExplorerModel()
+    @State private var explorer = DataExplorerModel(preferences: .standard)
     @State private var investigationRevision = 0
 
     var body: some View {
@@ -84,14 +84,6 @@ struct ContentView: View {
                 .tag(MainWindowTab.groups)
         }
         .frame(minWidth: 860, minHeight: 520)
-        // A global refresh-rate control in the toolbar, so it is reachable from
-        // every tab and changing it applies app-wide. Self-contained (@AppStorage),
-        // so it does not pull SamplerModel observation into this tab host.
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                RefreshIntervalControl()
-            }
-        }
         .forceQuitConfirmation(target: $appState.pendingForceQuit)
         .sheet(item: $appState.codesignTarget) { target in
             CodesignSheet(target: target)

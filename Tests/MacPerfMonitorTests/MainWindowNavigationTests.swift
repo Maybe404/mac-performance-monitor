@@ -1,0 +1,139 @@
+import AppKit
+import MacPerfMonitorCore
+import SwiftUI
+import XCTest
+
+@testable import MacPerfMonitor
+
+@MainActor
+final class MainWindowNavigationTests: XCTestCase {
+    func testFirstOpenNavigationMatchesReturningToDashboard() async throws {
+        try await verifyNavigation(width: 980, appearance: .darkAqua)
+        try await verifyNavigation(width: 1800, appearance: .aqua)
+    }
+
+    private func verifyNavigation(width: CGFloat, appearance: NSAppearance.Name) async throws {
+        _ = NSApplication.shared
+        let state = AppState()
+        let sampler = SamplerModel(persistenceEnabled: false)
+        let root = MainWindowGate()
+            .environmentObject(state)
+            .environmentObject(sampler)
+            .environment(\.samplerModel, sampler)
+            .environmentObject(sampler.menuLists)
+            .environmentObject(HelperManager())
+            .environmentObject(FullDiskAccessManager())
+            .environmentObject(LoginItemManager())
+            .environmentObject(MonitorSelection())
+            .environmentObject(ProcessGroupStore.shared)
+            .environmentObject(AppComponentsManager())
+        let controller = NSHostingController(rootView: root)
+        let window = NSWindow(contentViewController: controller)
+        window.title = "Main navigation test"
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: appearance)
+        window.toolbarStyle = .unifiedCompact
+        window.setContentSize(NSSize(width: width, height: 720))
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        await settle(window)
+
+        let initialToolbar = try XCTUnwrap(window.toolbar)
+        XCTAssertEqual(initialToolbar.items.count, 2)
+        let toolbarIDs = initialToolbar.items.map(\.itemIdentifier)
+        state.mainWindowOpen = true
+        await settle(window)
+        let first = try navigation(in: window)
+        try capture(window, name: "first-open-\(Int(width))")
+
+        state.requestedMainTab = .processes
+        await settle(window)
+        state.requestedMainTab = .dashboard
+        await settle(window)
+        let returned = try navigation(in: window)
+        try capture(window, name: "after-tab-\(Int(width))")
+
+        XCTAssertEqual(first.labels, returned.labels)
+        XCTAssertEqual(first.selected, 0)
+        XCTAssertEqual(returned.selected, 0)
+        XCTAssertEqual(first.frame, returned.frame)
+        XCTAssertEqual(first.toolbarHeight, returned.toolbarHeight)
+        XCTAssertEqual(first.itemCount, returned.itemCount)
+
+        state.mainWindowOpen = false
+        await settle(window)
+        XCTAssertTrue(window.toolbar === initialToolbar)
+        XCTAssertEqual(window.toolbar?.items.count, 2)
+        XCTAssertEqual(window.toolbar?.items.map(\.itemIdentifier), toolbarIDs)
+        XCTAssertNil(segmentedControl(in: try XCTUnwrap(window.contentView?.superview)))
+
+        state.mainWindowOpen = true
+        await settle(window)
+        let reopened = try navigation(in: window)
+        XCTAssertEqual(first.frame, reopened.frame)
+        XCTAssertEqual(first.labels, reopened.labels)
+        XCTAssertTrue(window.toolbar === initialToolbar)
+
+        state.mainWindowVisible = false
+        await settle(window)
+        XCTAssertTrue(window.toolbar === initialToolbar)
+        XCTAssertNil(segmentedControl(in: try XCTUnwrap(window.contentView?.superview)))
+
+        state.mainWindowVisible = true
+        await settle(window)
+        let visible = try navigation(in: window)
+        XCTAssertEqual(first.frame, visible.frame)
+        XCTAssertEqual(first.labels, visible.labels)
+        XCTAssertEqual(window.toolbar?.items.map(\.itemIdentifier), toolbarIDs)
+    }
+
+    private struct Navigation {
+        let labels: [String]
+        let selected: Int
+        let frame: CGRect
+        let toolbarHeight: CGFloat
+        let itemCount: Int
+    }
+
+    private func navigation(in window: NSWindow) throws -> Navigation {
+        let root = try XCTUnwrap(window.contentView?.superview)
+        let control = try XCTUnwrap(segmentedControl(in: root))
+        let toolbar = try XCTUnwrap(window.toolbar)
+        let labels = (0..<control.segmentCount).map { control.label(forSegment: $0) ?? "" }
+        let result = Navigation(
+            labels: labels, selected: control.selectedSegment,
+            frame: control.convert(control.bounds, to: root),
+            toolbarHeight: window.frame.height - window.contentLayoutRect.height,
+            itemCount: toolbar.items.count)
+        XCTAssertEqual(labels.count, 10)
+        XCTAssertTrue(labels.allSatisfy { !$0.isEmpty })
+        return result
+    }
+
+    private func segmentedControl(in view: NSView) -> NSSegmentedControl? {
+        if let control = view as? NSSegmentedControl, control.segmentCount == 10 { return control }
+        return view.subviews.lazy.compactMap { self.segmentedControl(in: $0) }.first
+    }
+
+    private func settle(_ window: NSWindow) async {
+        let settled = expectation(description: "Window renders its navigation")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { settled.fulfill() }
+        await fulfillment(of: [settled], timeout: 3)
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+    }
+
+    private func capture(_ window: NSWindow, name: String) throws {
+        guard let path = ProcessInfo.processInfo.environment["MACPERF_NAVIGATION_ARTIFACTS"] else {
+            return
+        }
+        let root = try XCTUnwrap(window.contentView?.superview)
+        let region = CGRect(x: 0, y: root.bounds.height - 80, width: root.bounds.width, height: 80)
+        let bitmap = try XCTUnwrap(root.bitmapImageRepForCachingDisplay(in: region))
+        root.cacheDisplay(in: region, to: bitmap)
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            .write(to: directory.appendingPathComponent(name + ".png"))
+    }
+}

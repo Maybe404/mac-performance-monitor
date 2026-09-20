@@ -12,7 +12,7 @@ struct DiskUsageView: View {
 
     @StateObject private var diskDetail = DiskDetailModel()
 
-    @State private var range: HistoryWindow = .oneHour
+    @StoredHistoryWindow("historyRange.disk") private var range
     @State private var history: [SystemHistoryPoint] = []
     /// Downsampled timeline + live point, memoized like the dashboard's:
     /// recomputed only when source data changes, never inside body.

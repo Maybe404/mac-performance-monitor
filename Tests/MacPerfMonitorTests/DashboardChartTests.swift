@@ -7,6 +7,119 @@ import XCTest
 
 @MainActor
 final class DashboardChartTests: XCTestCase {
+    func testDashboardHistoryRangeDefaultsToThirtyMinutesAndPersists() throws {
+        let suite = "MacPerfMonitorTests.HistoryRange.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preference = StoredHistoryWindow("historyRange.dashboard", store: defaults)
+        XCTAssertEqual(preference.wrappedValue, .thirtyMinutes)
+        XCTAssertNil(defaults.object(forKey: "historyRange.dashboard"))
+
+        preference.projectedValue.wrappedValue = .sixHours
+        let reopened = StoredHistoryWindow(
+            "historyRange.dashboard", store: try XCTUnwrap(UserDefaults(suiteName: suite)))
+        XCTAssertEqual(reopened.wrappedValue, .sixHours)
+        XCTAssertEqual(defaults.string(forKey: "historyRange.dashboard"), "sixHours")
+
+        reopened.wrappedValue = .fiveMinutes
+        XCTAssertEqual(defaults.string(forKey: "historyRange.dashboard"), "fiveMinutes")
+        XCTAssertEqual(
+            StoredHistoryWindow("historyRange.dashboard", store: defaults).wrappedValue,
+            .fiveMinutes)
+    }
+
+    func testDashboardHistoryRangesAreIndependentAndRejectUnknownValues() throws {
+        let suite = "MacPerfMonitorTests.HistoryRange.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let dashboard = StoredHistoryWindow("historyRange.dashboard", store: defaults)
+        let gpu = StoredHistoryWindow("historyRange.gpu", store: defaults)
+        dashboard.wrappedValue = .oneDay
+        XCTAssertEqual(gpu.wrappedValue, .thirtyMinutes)
+        gpu.wrappedValue = .oneHour
+        XCTAssertEqual(dashboard.wrappedValue, .oneDay)
+
+        defaults.set("obsoleteRange", forKey: "historyRange.disk")
+        XCTAssertEqual(
+            StoredHistoryWindow("historyRange.disk", store: defaults).wrappedValue, .thirtyMinutes)
+    }
+
+    func testNativeRangePickerRestoresItsSelectionAndKeepsPreviewOverridesLocal() async throws {
+        _ = NSApplication.shared
+        let suite = "MacPerfMonitorTests.NativeRange.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let state = AppState()
+        let host = NSHostingView(rootView: AnyView(EmptyView()))
+        let window = NSWindow(
+            contentRect: CGRect(x: 100, y: 100, width: 1100, height: 750),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.close() }
+
+        func settle() async {
+            let rendered = expectation(description: "Range picker renders")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { rendered.fulfill() }
+            await fulfillment(of: [rendered], timeout: 3)
+            host.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+        }
+
+        func picker(in view: NSView) -> NSSegmentedControl? {
+            if let control = view as? NSSegmentedControl,
+                control.segmentCount == HistoryWindow.allCases.count
+            {
+                return control
+            }
+            return view.subviews.lazy.compactMap { picker(in: $0) }.first
+        }
+
+        for reopening in [false, true] {
+            host.rootView = AnyView(
+                GPUView().environmentObject(state).defaultAppStorage(defaults))
+            await settle()
+            let control = try XCTUnwrap(picker(in: host))
+            XCTAssertEqual(control.selectedSegment, reopening ? 3 : 1)
+            if !reopening {
+                control.selectedSegment = 3
+                XCTAssertTrue(control.sendAction(control.action, to: control.target))
+                await settle()
+                XCTAssertEqual(defaults.string(forKey: "historyRange.gpu"), "sixHours")
+            }
+            host.rootView = AnyView(EmptyView())
+            await settle()
+        }
+
+        defaults.set("oneDay", forKey: "historyRange.dashboard")
+        host.rootView = AnyView(
+            HistoryRangeProbe(initialRange: .fiveMinutes).defaultAppStorage(defaults))
+        await settle()
+        let preview = try XCTUnwrap(picker(in: host))
+        XCTAssertEqual(preview.selectedSegment, 0)
+        preview.selectedSegment = 5
+        XCTAssertTrue(preview.sendAction(preview.action, to: preview.target))
+        await settle()
+        XCTAssertEqual(preview.selectedSegment, 5)
+        XCTAssertEqual(defaults.string(forKey: "historyRange.dashboard"), "oneDay")
+    }
+
+    private struct HistoryRangeProbe: View {
+        @StoredHistoryWindow("historyRange.dashboard") private var range
+
+        init(initialRange: HistoryWindow) {
+            _range = StoredHistoryWindow("historyRange.dashboard", initialValue: initialRange)
+        }
+
+        var body: some View {
+            Picker("Range", selection: $range) {
+                ForEach(HistoryWindow.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
     func testUptimeUsesElapsedTimeSinceBoot() {
         let boot = Date(timeIntervalSince1970: 1_700_000_000)
         for (elapsed, expected) in [

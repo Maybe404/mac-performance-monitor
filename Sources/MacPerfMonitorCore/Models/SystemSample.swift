@@ -109,7 +109,16 @@ public struct SystemSample: Sendable, Codable {
     // older samples decode and "not sampled" stays distinct from 0.
     public var gpuUtilization: Double?
     public var gpuPowerWatts: Double?
+    public var gpuMemoryBytes: UInt64?
+    public var gpuActiveResidency: Double?
+    public var gpuReadBandwidthGBps: Double?
+    public var gpuWriteBandwidthGBps: Double?
+    public var gpuTotalBandwidthGBps: Double?
     public var anePowerWatts: Double?
+    public var anePowerSampledAt: Date?
+    public var anePowerSampleInterval: TimeInterval?
+    public var aneTimeMillisecondsPerSecond: Double?
+    public var aneSampleIsPartial: Bool?
     // Thermal figures (v14), read from the SMC on the same ticks as the GPU
     // figures. Optional for the same reason: "not sampled" stays distinct
     // from 0. cpuDieC and gpuDieC are the hottest sensor of their domain;
@@ -132,6 +141,15 @@ public struct SystemSample: Sendable, Codable {
     /// macOS's own thermal pressure verdict, read every tick (public API, no
     /// SMC involved), so throttling history survives even without sensors.
     public var thermalPressure: ThermalPressureState?
+
+    public var reportedANEPowerWatts: Double? {
+        guard let anePowerSampledAt, let anePowerSampleInterval, let anePowerWatts else {
+            return nil
+        }
+        let reading = ANEPowerReading(
+            timestamp: anePowerSampledAt, interval: anePowerSampleInterval, watts: anePowerWatts)
+        return reading.isFresh(at: timestamp) ? anePowerWatts : nil
+    }
 
     public init(
         timestamp: Date,
@@ -181,7 +199,16 @@ public struct SystemSample: Sendable, Codable {
         bootVolumeFreeBytes: UInt64? = nil,
         gpuUtilization: Double? = nil,
         gpuPowerWatts: Double? = nil,
+        gpuMemoryBytes: UInt64? = nil,
+        gpuActiveResidency: Double? = nil,
+        gpuReadBandwidthGBps: Double? = nil,
+        gpuWriteBandwidthGBps: Double? = nil,
+        gpuTotalBandwidthGBps: Double? = nil,
         anePowerWatts: Double? = nil,
+        anePowerSampledAt: Date? = nil,
+        anePowerSampleInterval: TimeInterval? = nil,
+        aneTimeMillisecondsPerSecond: Double? = nil,
+        aneSampleIsPartial: Bool? = nil,
         cpuDieC: Double? = nil,
         gpuDieC: Double? = nil,
         ssdTemperatureC: Double? = nil,
@@ -258,7 +285,16 @@ public struct SystemSample: Sendable, Codable {
         self.bootVolumeFreeBytes = bootVolumeFreeBytes
         self.gpuUtilization = gpuUtilization
         self.gpuPowerWatts = gpuPowerWatts
+        self.gpuMemoryBytes = gpuMemoryBytes
+        self.gpuActiveResidency = gpuActiveResidency
+        self.gpuReadBandwidthGBps = gpuReadBandwidthGBps
+        self.gpuWriteBandwidthGBps = gpuWriteBandwidthGBps
+        self.gpuTotalBandwidthGBps = gpuTotalBandwidthGBps
         self.anePowerWatts = anePowerWatts
+        self.anePowerSampledAt = anePowerSampledAt
+        self.anePowerSampleInterval = anePowerSampleInterval
+        self.aneTimeMillisecondsPerSecond = aneTimeMillisecondsPerSecond
+        self.aneSampleIsPartial = aneSampleIsPartial
         self.cpuDieC = cpuDieC
         self.gpuDieC = gpuDieC
         self.ssdTemperatureC = ssdTemperatureC

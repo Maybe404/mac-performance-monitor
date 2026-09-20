@@ -14,6 +14,36 @@ final class UsageTimelineTests: XCTestCase {
             bundleID: "com.example.Editor", uid: UInt32(getuid()))
     }
 
+    func testUsageWindowDefaultsToThirtyMinutesAndSurvivesReopening() throws {
+        let suite = "MacPerfMonitorTests.UsageRange.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var requested: HistoryWindow?
+        let loader: UsageTimelineModel.HistoryLoader = { _, window, _, completion in
+            requested = window
+            completion(.success(.init(intervals: [], bucketSeconds: 60)))
+        }
+        let model = UsageTimelineModel(
+            target: target, now: now, preferences: defaults, loadHistory: loader)
+        model.load()
+        XCTAssertEqual(model.window, .thirtyMinutes)
+        XCTAssertEqual(requested, .thirtyMinutes)
+        model.load(window: .sevenDays)
+        model.close()
+
+        let reopened = UsageTimelineModel(
+            target: target, now: now, preferences: defaults, loadHistory: loader)
+        reopened.load()
+        XCTAssertEqual(reopened.window, .sevenDays)
+        XCTAssertEqual(requested, .sevenDays)
+        XCTAssertEqual(reopened.endDate, now)
+
+        defaults.set("obsoleteRange", forKey: UsageTimelineModel.windowDefaultsKey)
+        XCTAssertEqual(
+            UsageTimelineModel(target: target, preferences: defaults, loadHistory: loader).window,
+            .thirtyMinutes)
+    }
+
     func testAppleHistoryRequiresOptInAndIsClearedWhenDisabled() {
         var activityReads = 0
         var capturedBundle: String?
@@ -133,11 +163,13 @@ final class UsageTimelineTests: XCTestCase {
             XCTAssertFalse(model.isLoading)
             XCTAssertEqual(Set(model.intervals.map(\.kind)), Set(UsageTimeline.Kind.allCases))
             let picker = try XCTUnwrap(rangeControl(in: host))
-            XCTAssertEqual(picker.segmentCount, 4)
+            XCTAssertEqual(picker.segmentCount, 5)
+            XCTAssertEqual(model.window, .thirtyMinutes)
+            XCTAssertEqual(picker.selectedSegment, 0)
             XCTAssertTrue(host.bounds.contains(picker.convert(picker.bounds, to: host)))
             try save(host, name: name)
 
-            picker.selectedSegment = 0
+            picker.selectedSegment = 1
             XCTAssertTrue(picker.sendAction(picker.action, to: picker.target))
             let changed = expectation(description: "The timeframe changes")
             DispatchQueue.main.async { changed.fulfill() }
@@ -350,8 +382,14 @@ final class UsageTimelineTests: XCTestCase {
         }
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let image = try capture(view)
-        let png = try XCTUnwrap(image.representation(using: .png, properties: [:]))
-        try png.write(to: directory.appendingPathComponent(name + ".png"))
+        let window = try XCTUnwrap(view.window)
+        let output = directory.appendingPathComponent(name + ".png")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l", String(window.windowNumber), output.path]
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertNotNil(NSBitmapImageRep(data: try Data(contentsOf: output)))
     }
 }

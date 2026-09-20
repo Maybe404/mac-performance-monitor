@@ -22,6 +22,8 @@ extension UsageTimelineTarget {
 
 @MainActor
 final class UsageTimelineModel: ObservableObject {
+    static let windowDefaultsKey = "historyRange.usageTimeline"
+
     typealias HistoryLoader = (
         ProcessIdentity, HistoryWindow, Date,
         @escaping (Result<UsageTimeline.ObservedHistory, Error>) -> Void
@@ -32,7 +34,7 @@ final class UsageTimelineModel: ObservableObject {
     ) -> Void
 
     let target: UsageTimelineTarget
-    @Published private(set) var window: HistoryWindow = .oneDay
+    @Published private(set) var window: HistoryWindow
     @Published private(set) var endDate: Date
     @Published private(set) var history: UsageTimeline.ObservedHistory?
     @Published private(set) var activity: [UsageTimeline.Interval] = []
@@ -44,16 +46,21 @@ final class UsageTimelineModel: ObservableObject {
 
     private let loadHistory: HistoryLoader
     private let loadActivity: ActivityLoader
+    private let preferences: UserDefaults?
     private var generation = 0
     private static let activityQueue = DispatchQueue(
         label: "MacPerfMonitor.usageTimeline.activity", qos: .utility)
 
     init(
         target: UsageTimelineTarget, now: Date = Date(),
+        preferences: UserDefaults? = nil,
         loadHistory: @escaping HistoryLoader, loadActivity: ActivityLoader? = nil
     ) {
         self.target = target
         self.endDate = now
+        self.preferences = preferences
+        let saved = preferences?.string(forKey: Self.windowDefaultsKey)
+        self.window = saved.flatMap(HistoryWindow.init(rawValue:)) ?? .thirtyMinutes
         self.loadHistory = loadHistory
         self.loadActivity = loadActivity ?? Self.readActivity
     }
@@ -67,7 +74,10 @@ final class UsageTimelineModel: ObservableObject {
     }
 
     func load(window: HistoryWindow? = nil, endingAt: Date? = nil) {
-        if let window { self.window = window }
+        if let window {
+            self.window = window
+            preferences?.set(window.rawValue, forKey: Self.windowDefaultsKey)
+        }
         if let endingAt { self.endDate = min(endingAt, Date()) }
         generation &+= 1
         let request = generation

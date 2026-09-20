@@ -61,7 +61,21 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
     /// GPU device figures (v13); nil on ticks that did not read the GPU.
     public var gpuUtilization: Double?
     public var gpuPowerWatts: Double?
+    public var gpuMemoryBytes: Double?
+    public var gpuMemorySampleCount: Int?
+    public var gpuActiveResidency: Double?
+    public var gpuActiveSampleCount: Int?
+    public var gpuReadBandwidthGBps: Double?
+    public var gpuReadBandwidthSampleCount: Int?
+    public var gpuWriteBandwidthGBps: Double?
+    public var gpuWriteBandwidthSampleCount: Int?
+    public var gpuTotalBandwidthGBps: Double?
+    public var gpuTotalBandwidthSampleCount: Int?
     public var anePowerWatts: Double?
+    public var anePowerSampleCount: Int?
+    public var aneTimeMillisecondsPerSecond: Double?
+    public var aneSampleIsPartial: Bool?
+    public var aneSampleCount: Int?
     public var diskUtilizationPercent: Double?
     public var bootFreeBytes: UInt64?
     public var bootTotalBytes: UInt64?
@@ -125,7 +139,21 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
         bootTotalBytes: UInt64? = nil,
         gpuUtilization: Double? = nil,
         gpuPowerWatts: Double? = nil,
+        gpuMemoryBytes: Double? = nil,
+        gpuMemorySampleCount: Int? = nil,
+        gpuActiveResidency: Double? = nil,
+        gpuActiveSampleCount: Int? = nil,
+        gpuReadBandwidthGBps: Double? = nil,
+        gpuReadBandwidthSampleCount: Int? = nil,
+        gpuWriteBandwidthGBps: Double? = nil,
+        gpuWriteBandwidthSampleCount: Int? = nil,
+        gpuTotalBandwidthGBps: Double? = nil,
+        gpuTotalBandwidthSampleCount: Int? = nil,
         anePowerWatts: Double? = nil,
+        anePowerSampleCount: Int? = nil,
+        aneTimeMillisecondsPerSecond: Double? = nil,
+        aneSampleIsPartial: Bool? = nil,
+        aneSampleCount: Int? = nil,
         cpuDieC: Double? = nil,
         gpuDieC: Double? = nil,
         ssdTemperatureC: Double? = nil,
@@ -177,7 +205,21 @@ public struct SystemHistoryPoint: Sendable, Identifiable, Equatable {
         self.bootTotalBytes = bootTotalBytes
         self.gpuUtilization = gpuUtilization
         self.gpuPowerWatts = gpuPowerWatts
+        self.gpuMemoryBytes = gpuMemoryBytes
+        self.gpuMemorySampleCount = gpuMemorySampleCount
+        self.gpuActiveResidency = gpuActiveResidency
+        self.gpuActiveSampleCount = gpuActiveSampleCount
+        self.gpuReadBandwidthGBps = gpuReadBandwidthGBps
+        self.gpuReadBandwidthSampleCount = gpuReadBandwidthSampleCount
+        self.gpuWriteBandwidthGBps = gpuWriteBandwidthGBps
+        self.gpuWriteBandwidthSampleCount = gpuWriteBandwidthSampleCount
+        self.gpuTotalBandwidthGBps = gpuTotalBandwidthGBps
+        self.gpuTotalBandwidthSampleCount = gpuTotalBandwidthSampleCount
         self.anePowerWatts = anePowerWatts
+        self.anePowerSampleCount = anePowerSampleCount
+        self.aneTimeMillisecondsPerSecond = aneTimeMillisecondsPerSecond
+        self.aneSampleIsPartial = aneSampleIsPartial
+        self.aneSampleCount = aneSampleCount
         self.cpuDieC = cpuDieC
         self.gpuDieC = gpuDieC
         self.cpuDieAverageC = cpuDieAverageC
@@ -218,6 +260,13 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
     public var swapUsed: Double? = nil
     public var cpuDieC: Double? = nil
     public var gpuDieC: Double? = nil
+    public var aneTimeMillisecondsPerSecond: Double? = nil
+    public var anePowerWatts: Double? = nil
+    public var gpuMemoryBytes: Double? = nil
+    public var gpuActiveResidency: Double? = nil
+    public var gpuReadBandwidthGBps: Double? = nil
+    public var gpuWriteBandwidthGBps: Double? = nil
+    public var gpuTotalBandwidthGBps: Double? = nil
 
     public init(
         pressurePercent: Double, cpuLoad: Double, networkInBytesPerSec: Double,
@@ -226,7 +275,11 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
         loadAverage1: Double? = nil,
         appMemory: Double? = nil, wired: Double? = nil, compressed: Double? = nil,
         cachedFiles: Double? = nil, swapUsed: Double? = nil,
-        cpuDieC: Double? = nil, gpuDieC: Double? = nil
+        cpuDieC: Double? = nil, gpuDieC: Double? = nil,
+        aneTimeMillisecondsPerSecond: Double? = nil, anePowerWatts: Double? = nil,
+        gpuMemoryBytes: Double? = nil, gpuActiveResidency: Double? = nil,
+        gpuReadBandwidthGBps: Double? = nil, gpuWriteBandwidthGBps: Double? = nil,
+        gpuTotalBandwidthGBps: Double? = nil
     ) {
         self.pressurePercent = pressurePercent
         self.cpuLoad = cpuLoad
@@ -243,6 +296,13 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
         self.swapUsed = swapUsed
         self.cpuDieC = cpuDieC
         self.gpuDieC = gpuDieC
+        self.aneTimeMillisecondsPerSecond = aneTimeMillisecondsPerSecond
+        self.anePowerWatts = anePowerWatts
+        self.gpuMemoryBytes = gpuMemoryBytes
+        self.gpuActiveResidency = gpuActiveResidency
+        self.gpuReadBandwidthGBps = gpuReadBandwidthGBps
+        self.gpuWriteBandwidthGBps = gpuWriteBandwidthGBps
+        self.gpuTotalBandwidthGBps = gpuTotalBandwidthGBps
     }
 
     /// The peaks of a single raw sample: the sample itself.
@@ -256,7 +316,13 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
             gpuUtilization: point.gpuUtilization, loadAverage1: point.loadAverage1,
             appMemory: Double(point.appMemory), wired: Double(point.wired),
             compressed: Double(point.compressed), cachedFiles: Double(point.cachedFiles),
-            swapUsed: Double(point.swapUsed), cpuDieC: point.cpuDieC, gpuDieC: point.gpuDieC)
+            swapUsed: Double(point.swapUsed), cpuDieC: point.cpuDieC, gpuDieC: point.gpuDieC,
+            aneTimeMillisecondsPerSecond: point.aneTimeMillisecondsPerSecond,
+            anePowerWatts: point.anePowerWatts, gpuMemoryBytes: point.gpuMemoryBytes,
+            gpuActiveResidency: point.gpuActiveResidency,
+            gpuReadBandwidthGBps: point.gpuReadBandwidthGBps,
+            gpuWriteBandwidthGBps: point.gpuWriteBandwidthGBps,
+            gpuTotalBandwidthGBps: point.gpuTotalBandwidthGBps)
     }
 
     /// The element-wise larger of two peaks.
@@ -282,7 +348,24 @@ public struct SystemHistoryPeaks: Sendable, Equatable {
             cachedFiles: completeMaximum(cachedFiles, other.cachedFiles),
             swapUsed: completeMaximum(swapUsed, other.swapUsed),
             cpuDieC: [cpuDieC, other.cpuDieC].compactMap { $0 }.max(),
-            gpuDieC: [gpuDieC, other.gpuDieC].compactMap { $0 }.max())
+            gpuDieC: [gpuDieC, other.gpuDieC].compactMap { $0 }.max(),
+            aneTimeMillisecondsPerSecond: [
+                aneTimeMillisecondsPerSecond, other.aneTimeMillisecondsPerSecond,
+            ]
+            .compactMap { $0 }.max(),
+            anePowerWatts: [anePowerWatts, other.anePowerWatts].compactMap { $0 }.max(),
+            gpuMemoryBytes: [gpuMemoryBytes, other.gpuMemoryBytes].compactMap { $0 }.max(),
+            gpuActiveResidency: [gpuActiveResidency, other.gpuActiveResidency].compactMap { $0 }
+                .max(),
+            gpuReadBandwidthGBps: [gpuReadBandwidthGBps, other.gpuReadBandwidthGBps].compactMap {
+                $0
+            }.max(),
+            gpuWriteBandwidthGBps: [gpuWriteBandwidthGBps, other.gpuWriteBandwidthGBps].compactMap {
+                $0
+            }.max(),
+            gpuTotalBandwidthGBps: [gpuTotalBandwidthGBps, other.gpuTotalBandwidthGBps].compactMap {
+                $0
+            }.max())
     }
 }
 
@@ -396,11 +479,20 @@ extension SampleStore {
                        battery_charge, battery_power, battery_health, battery_temp, net_in, net_out,
                        disk_read, disk_write, disk_read_iops, disk_write_iops,
                        disk_read_latency, disk_write_latency, disk_util, boot_free, boot_total,
-                       gpu_util, gpu_power, ane_power,
+                       gpu_util, gpu_power,
+                       CASE WHEN ane_power_observed_at IS NOT NULL THEN ane_power END AS ane_power,
                        cpu_die, gpu_die, ssd_temp, fan_rpm, thermal_state,
                        cpu_p_die, cpu_e_die, airflow_temp, skin_temp, wireless_temp,
                        vrail_temp, other_temp,
-                       load_1, load_5, load_15
+                      load_1, load_5, load_15,
+                      ane_time, ane_partial,
+                      CASE WHEN ane_time IS NULL THEN 0 ELSE 1 END AS ane_time_samples,
+                      CASE WHEN ane_power_observed_at IS NOT NULL AND ane_power IS NOT NULL THEN 1 ELSE 0 END AS ane_power_samples,
+                      gpu_memory, CASE WHEN gpu_memory IS NULL THEN 0 ELSE 1 END AS gpu_memory_samples,
+                      gpu_active, CASE WHEN gpu_active IS NULL THEN 0 ELSE 1 END AS gpu_active_samples,
+                      gpu_bw_read, CASE WHEN gpu_bw_read IS NULL THEN 0 ELSE 1 END AS gpu_bw_read_samples,
+                      gpu_bw_write, CASE WHEN gpu_bw_write IS NULL THEN 0 ELSE 1 END AS gpu_bw_write_samples,
+                      gpu_bw_total, CASE WHEN gpu_bw_total IS NULL THEN 0 ELSE 1 END AS gpu_bw_total_samples
                 FROM system_samples
                 WHERE timestamp >= ? AND timestamp <= ?
                 ORDER BY timestamp ASC
@@ -433,7 +525,8 @@ extension SampleStore {
                        disk_read_avg, disk_write_avg, disk_read_iops_avg, disk_write_iops_avg,
                        disk_read_latency_avg, disk_write_latency_avg, disk_util_avg,
                        boot_free_min, boot_total,
-                       gpu_util_avg, gpu_power_avg, ane_power_avg,
+                       gpu_util_avg, gpu_power_avg,
+                       CASE WHEN ane_power_samples > 0 THEN ane_power_avg END AS ane_power_avg,
                        cpu_die_max, gpu_die_max, ssd_temp_max, fan_rpm_max, thermal_state_max,
                        cpu_p_die_max, cpu_e_die_max, airflow_temp_max, skin_temp_max,
                        wireless_temp_max, vrail_temp_max, other_temp_max,
@@ -446,7 +539,15 @@ extension SampleStore {
                        app_min, wired_min, compressed_min, cached_min, swap_used_min,
                        cpu_die_min, gpu_die_min,
                        app_max, wired_max, compressed_max, cached_max, swap_used_max,
-                       cpu_die_avg, gpu_die_avg, cpu_die_samples, gpu_die_samples
+                      cpu_die_avg, gpu_die_avg, cpu_die_samples, gpu_die_samples,
+                       ane_time_avg AS ane_time, ane_partial, ane_time_max, ane_time_samples, ane_time_min,
+                       ane_power_samples, ane_power_min,
+                       CASE WHEN ane_power_samples > 0 THEN ane_power_max END AS ane_power_max,
+                       gpu_memory_avg AS gpu_memory, gpu_memory_min, gpu_memory_max, gpu_memory_samples,
+                       gpu_active_avg AS gpu_active, gpu_active_min, gpu_active_max, gpu_active_samples,
+                       gpu_bw_read_avg AS gpu_bw_read, gpu_bw_read_min, gpu_bw_read_max, gpu_bw_read_samples,
+                       gpu_bw_write_avg AS gpu_bw_write, gpu_bw_write_min, gpu_bw_write_max, gpu_bw_write_samples,
+                       gpu_bw_total_avg AS gpu_bw_total, gpu_bw_total_min, gpu_bw_total_max, gpu_bw_total_samples
                 FROM \(table)
                 WHERE bucket >= ? AND bucket <= ?
                 ORDER BY bucket ASC
@@ -464,7 +565,12 @@ extension SampleStore {
             gpuUtilization: row[47], loadAverage1: row[48],
             appMemory: row[66], wired: row[67], compressed: row[68],
             cachedFiles: row[69], swapUsed: row[70],
-            cpuDieC: point.cpuDieC, gpuDieC: point.gpuDieC)
+            cpuDieC: point.cpuDieC, gpuDieC: point.gpuDieC,
+            aneTimeMillisecondsPerSecond: row["ane_time_max"], anePowerWatts: row["ane_power_max"],
+            gpuMemoryBytes: row["gpu_memory_max"], gpuActiveResidency: row["gpu_active_max"],
+            gpuReadBandwidthGBps: row["gpu_bw_read_max"],
+            gpuWriteBandwidthGBps: row["gpu_bw_write_max"],
+            gpuTotalBandwidthGBps: row["gpu_bw_total_max"])
         point.sampleCount = row[49]
         point.bucketDuration = row[50]
         // Required scalar minima are non-optional inside SystemHistoryPeaks.
@@ -483,6 +589,13 @@ extension SampleStore {
                 cpuDieC: row[64], gpuDieC: row[65])
         }
         point.cpuDieAverageC = row[71]
+        point.minima?.aneTimeMillisecondsPerSecond = row["ane_time_min"]
+        point.minima?.anePowerWatts = row["ane_power_min"]
+        point.minima?.gpuMemoryBytes = row["gpu_memory_min"]
+        point.minima?.gpuActiveResidency = row["gpu_active_min"]
+        point.minima?.gpuReadBandwidthGBps = row["gpu_bw_read_min"]
+        point.minima?.gpuWriteBandwidthGBps = row["gpu_bw_write_min"]
+        point.minima?.gpuTotalBandwidthGBps = row["gpu_bw_total_min"]
         point.gpuDieAverageC = row[72]
         point.cpuDieSampleCount = row[73]
         point.gpuDieSampleCount = row[74]
@@ -525,7 +638,21 @@ extension SampleStore {
             bootTotalBytes: (row[22] as Int64?).map(SQLInt.read),
             gpuUtilization: row[23],
             gpuPowerWatts: row[24],
+            gpuMemoryBytes: row["gpu_memory"],
+            gpuMemorySampleCount: row["gpu_memory_samples"],
+            gpuActiveResidency: row["gpu_active"],
+            gpuActiveSampleCount: row["gpu_active_samples"],
+            gpuReadBandwidthGBps: row["gpu_bw_read"],
+            gpuReadBandwidthSampleCount: row["gpu_bw_read_samples"],
+            gpuWriteBandwidthGBps: row["gpu_bw_write"],
+            gpuWriteBandwidthSampleCount: row["gpu_bw_write_samples"],
+            gpuTotalBandwidthGBps: row["gpu_bw_total"],
+            gpuTotalBandwidthSampleCount: row["gpu_bw_total_samples"],
             anePowerWatts: row[25],
+            anePowerSampleCount: row["ane_power_samples"],
+            aneTimeMillisecondsPerSecond: row["ane_time"],
+            aneSampleIsPartial: row["ane_partial"],
+            aneSampleCount: row["ane_time_samples"],
             cpuDieC: row[26],
             gpuDieC: row[27],
             ssdTemperatureC: row[28],

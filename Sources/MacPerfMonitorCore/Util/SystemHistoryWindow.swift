@@ -78,6 +78,33 @@ public struct SystemHistoryWindow {
         case cachedFilesPeak
         case swapUsedMinimum
         case swapUsedPeak
+        case aneTimeMillisecondsPerSecond
+        case aneTimeMinimum
+        case aneTimePeak
+        case aneTimeSampleCount
+        case anePowerMinimum
+        case anePowerPeak
+        case anePowerSampleCount
+        case gpuMemoryBytes
+        case gpuMemoryMinimum
+        case gpuMemoryPeak
+        case gpuMemorySampleCount
+        case gpuActiveResidency
+        case gpuActiveMinimum
+        case gpuActivePeak
+        case gpuActiveSampleCount
+        case gpuReadBandwidthGBps
+        case gpuReadBandwidthMinimum
+        case gpuReadBandwidthPeak
+        case gpuReadBandwidthSampleCount
+        case gpuWriteBandwidthGBps
+        case gpuWriteBandwidthMinimum
+        case gpuWriteBandwidthPeak
+        case gpuWriteBandwidthSampleCount
+        case gpuTotalBandwidthGBps
+        case gpuTotalBandwidthMinimum
+        case gpuTotalBandwidthPeak
+        case gpuTotalBandwidthSampleCount
     }
 
     /// Timestamps as `timeIntervalSinceReferenceDate`, oldest first.
@@ -194,7 +221,7 @@ public struct SystemHistoryWindow {
         columns[Column.diskWriteBytesPerSec.rawValue].append(point.diskWriteBytesPerSec)
         columns[Column.gpuUtilization.rawValue].append(point.gpuUtilization ?? 0)
         columns[Column.gpuPowerWatts.rawValue].append(point.gpuPowerWatts ?? 0)
-        columns[Column.anePowerWatts.rawValue].append(point.anePowerWatts ?? 0)
+        columns[Column.anePowerWatts.rawValue].append(point.anePowerWatts ?? .nan)
         columns[Column.cpuDieC.rawValue].append(point.cpuDieC ?? 0)
         let peaks = point.effectivePeaks
         columns[Column.pressurePercentPeak.rawValue].append(peaks.pressurePercent)
@@ -233,6 +260,47 @@ public struct SystemHistoryWindow {
         columns[Column.cachedFilesPeak.rawValue].append(memoryPeaks?.cachedFiles ?? .nan)
         columns[Column.swapUsedMinimum.rawValue].append(minima?.swapUsed ?? .nan)
         columns[Column.swapUsedPeak.rawValue].append(memoryPeaks?.swapUsed ?? .nan)
+        columns[Column.aneTimeMillisecondsPerSecond.rawValue].append(
+            point.aneTimeMillisecondsPerSecond ?? .nan)
+        columns[Column.aneTimeMinimum.rawValue].append(minima?.aneTimeMillisecondsPerSecond ?? .nan)
+        columns[Column.aneTimePeak.rawValue].append(peaks.aneTimeMillisecondsPerSecond ?? .nan)
+        columns[Column.aneTimeSampleCount.rawValue].append(
+            Double(point.aneSampleCount ?? (point.aneTimeMillisecondsPerSecond == nil ? 0 : 1)))
+        columns[Column.anePowerMinimum.rawValue].append(minima?.anePowerWatts ?? .nan)
+        columns[Column.anePowerPeak.rawValue].append(peaks.anePowerWatts ?? .nan)
+        columns[Column.anePowerSampleCount.rawValue].append(
+            Double(point.anePowerSampleCount ?? (point.anePowerWatts == nil ? 0 : 1)))
+        columns[Column.gpuMemoryBytes.rawValue].append(point.gpuMemoryBytes ?? .nan)
+        columns[Column.gpuMemoryMinimum.rawValue].append(minima?.gpuMemoryBytes ?? .nan)
+        columns[Column.gpuMemoryPeak.rawValue].append(peaks.gpuMemoryBytes ?? .nan)
+        columns[Column.gpuMemorySampleCount.rawValue].append(
+            Double(point.gpuMemorySampleCount ?? (point.gpuMemoryBytes == nil ? 0 : 1)))
+        columns[Column.gpuActiveResidency.rawValue].append(point.gpuActiveResidency ?? .nan)
+        columns[Column.gpuActiveMinimum.rawValue].append(minima?.gpuActiveResidency ?? .nan)
+        columns[Column.gpuActivePeak.rawValue].append(peaks.gpuActiveResidency ?? .nan)
+        columns[Column.gpuActiveSampleCount.rawValue].append(
+            Double(point.gpuActiveSampleCount ?? (point.gpuActiveResidency == nil ? 0 : 1)))
+        columns[Column.gpuReadBandwidthGBps.rawValue].append(point.gpuReadBandwidthGBps ?? .nan)
+        columns[Column.gpuReadBandwidthMinimum.rawValue].append(
+            minima?.gpuReadBandwidthGBps ?? .nan)
+        columns[Column.gpuReadBandwidthPeak.rawValue].append(peaks.gpuReadBandwidthGBps ?? .nan)
+        columns[Column.gpuReadBandwidthSampleCount.rawValue].append(
+            Double(point.gpuReadBandwidthSampleCount ?? (point.gpuReadBandwidthGBps == nil ? 0 : 1))
+        )
+        columns[Column.gpuWriteBandwidthGBps.rawValue].append(point.gpuWriteBandwidthGBps ?? .nan)
+        columns[Column.gpuWriteBandwidthMinimum.rawValue].append(
+            minima?.gpuWriteBandwidthGBps ?? .nan)
+        columns[Column.gpuWriteBandwidthPeak.rawValue].append(peaks.gpuWriteBandwidthGBps ?? .nan)
+        columns[Column.gpuWriteBandwidthSampleCount.rawValue].append(
+            Double(
+                point.gpuWriteBandwidthSampleCount ?? (point.gpuWriteBandwidthGBps == nil ? 0 : 1)))
+        columns[Column.gpuTotalBandwidthGBps.rawValue].append(point.gpuTotalBandwidthGBps ?? .nan)
+        columns[Column.gpuTotalBandwidthMinimum.rawValue].append(
+            minima?.gpuTotalBandwidthGBps ?? .nan)
+        columns[Column.gpuTotalBandwidthPeak.rawValue].append(peaks.gpuTotalBandwidthGBps ?? .nan)
+        columns[Column.gpuTotalBandwidthSampleCount.rawValue].append(
+            Double(
+                point.gpuTotalBandwidthSampleCount ?? (point.gpuTotalBandwidthGBps == nil ? 0 : 1)))
         latest = point
     }
 

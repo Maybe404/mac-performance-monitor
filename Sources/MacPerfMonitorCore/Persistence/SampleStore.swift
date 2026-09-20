@@ -297,9 +297,11 @@ public final class SampleStore {
                  cpu_p_die, cpu_e_die, airflow_temp, skin_temp, wireless_temp, vrail_temp,
                    other_temp, load_1, load_5, load_15,
                    swap_sample_valid, pressure_sample_valid, swap_in_rate, swap_out_rate,
-                   swap_in_pages_delta, swap_out_pages_delta, memory_page_size, memory_interval)
+                   swap_in_pages_delta, swap_out_pages_delta, memory_page_size, memory_interval,
+                   ane_time, ane_partial, ane_power_observed_at, ane_power_interval, gpu_memory, gpu_active,
+                   gpu_bw_read, gpu_bw_write, gpu_bw_total)
                 VALUES (?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,
-                    ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?)
+                    ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?)
                 """)
         try statement.execute(
             arguments: [
@@ -321,7 +323,7 @@ public final class SampleStore {
                 s.diskReadOperationsPerSec, s.diskWriteOperationsPerSec,
                 s.diskReadLatencyMs, s.diskWriteLatencyMs, s.diskUtilizationPercent,
                 s.bootVolumeFreeBytes.map(SQLInt.store), s.bootVolumeTotalBytes.map(SQLInt.store),
-                s.gpuUtilization, s.gpuPowerWatts, s.anePowerWatts,
+                s.gpuUtilization, s.gpuPowerWatts, s.reportedANEPowerWatts,
                 s.cpuDieC, s.gpuDieC, s.ssdTemperatureC, s.fanRPM,
                 s.thermalPressure?.rawValue,
                 s.cpuPCoreDieC, s.cpuECoreDieC, s.airflowC, s.skinC, s.wirelessC,
@@ -331,6 +333,13 @@ public final class SampleStore {
                 s.swapOutBytesPerSecond,
                 s.swapInPagesDelta.map(SQLInt.store), s.swapOutPagesDelta.map(SQLInt.store),
                 s.memoryPageSize.map(SQLInt.store), s.memorySampleInterval,
+                s.aneTimeMillisecondsPerSecond, s.aneSampleIsPartial,
+                s.anePowerSampledAt?.timeIntervalSince1970, s.anePowerSampleInterval,
+                s.gpuMemoryBytes.map(SQLInt.store),
+                s.gpuActiveResidency.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil },
+                s.gpuReadBandwidthGBps.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil },
+                s.gpuWriteBandwidthGBps.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil },
+                s.gpuTotalBandwidthGBps.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil },
             ])
     }
 
@@ -562,7 +571,17 @@ public final class SampleStore {
             bootVolumeFreeBytes: (row["boot_free"] as Int64?).map(SQLInt.read),
             gpuUtilization: row["gpu_util"],
             gpuPowerWatts: row["gpu_power"],
+            gpuMemoryBytes: (row["gpu_memory"] as Int64?).map(SQLInt.read),
+            gpuActiveResidency: row["gpu_active"],
+            gpuReadBandwidthGBps: row["gpu_bw_read"],
+            gpuWriteBandwidthGBps: row["gpu_bw_write"],
+            gpuTotalBandwidthGBps: row["gpu_bw_total"],
             anePowerWatts: row["ane_power"],
+            anePowerSampledAt: (row["ane_power_observed_at"] as Double?).map(
+                Date.init(timeIntervalSince1970:)),
+            anePowerSampleInterval: row["ane_power_interval"],
+            aneTimeMillisecondsPerSecond: row["ane_time"],
+            aneSampleIsPartial: row["ane_partial"],
             cpuDieC: row["cpu_die"],
             gpuDieC: row["gpu_die"],
             ssdTemperatureC: row["ssd_temp"],

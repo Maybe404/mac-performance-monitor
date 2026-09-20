@@ -8,6 +8,60 @@ import XCTest
 
 @MainActor
 final class DataExplorerTests: XCTestCase {
+    func testExplorerRestoresChosenWindowAndCustomZoom() throws {
+        let suite = "MacPerfMonitorTests.ExplorerRange.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let now = Date(timeIntervalSince1970: 1_700_000_400)
+        let model = DataExplorerModel(now: now, preferences: defaults)
+        XCTAssertEqual(model.span, 1800)
+        XCTAssertNil(defaults.object(forKey: DataExplorerModel.spanDefaultsKey))
+
+        model.chooseWindow(.sixHours)
+        let reopened = DataExplorerModel(now: now, preferences: defaults)
+        XCTAssertEqual(reopened.span, 21600)
+        XCTAssertEqual(reopened.domain.upperBound, now)
+        XCTAssertTrue(reopened.followsLive)
+
+        reopened.zoom(0.3)
+        XCTAssertEqual(
+            DataExplorerModel(now: now, preferences: defaults).span, 6480, accuracy: 0.001)
+        for invalid in [0.0, -1, 19, 90 * 86_400 + 1] {
+            defaults.set(invalid, forKey: DataExplorerModel.spanDefaultsKey)
+            XCTAssertEqual(DataExplorerModel(now: now, preferences: defaults).span, 1800)
+        }
+    }
+
+    func testANEExplorerUsesAccountedTimeAndMissingDataGaps() throws {
+        let definition = try XCTUnwrap(ExplorerMetrics.all.first { $0.id == "aneTime" })
+        XCTAssertEqual(definition.unit.symbol, "ms/s")
+        guard case .system(let fields) = definition.source else {
+            return XCTFail("Expected machine accounting")
+        }
+        let field = try XCTUnwrap(fields.first)
+        var point = fixture().system[0]
+        point.aneTimeMillisecondsPerSecond = nil
+        XCTAssertTrue(field.column([point]).values.first?.isNaN == true)
+        point.aneTimeMillisecondsPerSecond = 750
+        point.aneSampleCount = 2
+        let column = field.column([point])
+        XCTAssertEqual(column.values.first, 750)
+        XCTAssertEqual(column.weights?.first, 1)
+        point.bucketDuration = 60
+        point.sampleCount = 3
+        XCTAssertEqual(field.column([point]).weights?.first, 2)
+        let power = try XCTUnwrap(ExplorerMetrics.all.first { $0.id == "power" })
+        guard case .system(let powerFields) = power.source else {
+            return XCTFail("Expected power history")
+        }
+        XCTAssertEqual(powerFields.count, 2)
+        let anePower = powerFields[1]
+        point.anePowerWatts = 2.5
+        point.anePowerSampleCount = 2
+        XCTAssertEqual(anePower.column([point]).values.first, 2.5)
+        XCTAssertEqual(anePower.column([point]).weights?.first, 2)
+    }
+
     func testLatestMetricSelectionWinsBackgroundPreparation() async {
         let model = DataExplorerModel()
         model.seed(fixture(), selected: [], enabled: ExplorerMetrics.defaultIDs)
@@ -143,13 +197,13 @@ final class DataExplorerTests: XCTestCase {
         let time = Date(timeIntervalSince1970: 1_700_000_400)
         let model = DataExplorerModel(now: time)
         model.showTime(time)
-        XCTAssertEqual(model.domain.lowerBound, time.addingTimeInterval(-1800))
-        XCTAssertEqual(model.domain.upperBound, time.addingTimeInterval(1800))
-        model.zoom(0.5)
-        XCTAssertEqual(model.span, 1800)
         XCTAssertEqual(model.domain.lowerBound, time.addingTimeInterval(-900))
+        XCTAssertEqual(model.domain.upperBound, time.addingTimeInterval(900))
+        model.zoom(0.5)
+        XCTAssertEqual(model.span, 900)
+        XCTAssertEqual(model.domain.lowerBound, time.addingTimeInterval(-450))
         model.pan(-1)
-        XCTAssertEqual(model.domain.upperBound, time.addingTimeInterval(-900))
+        XCTAssertEqual(model.domain.upperBound, time.addingTimeInterval(-450))
         XCTAssertFalse(model.followsLive)
     }
 
@@ -160,7 +214,7 @@ final class DataExplorerTests: XCTestCase {
         let pinned = original.lowerBound.addingTimeInterval(model.span * 0.6)
         model.cursor.pin(pinned)
         model.zoom(0.5, anchorFraction: 0.25)
-        XCTAssertEqual(model.span, 1800)
+        XCTAssertEqual(model.span, 900)
         XCTAssertEqual(model.domain.lowerBound.addingTimeInterval(model.span * 0.25), pointer)
         XCTAssertEqual(model.cursor.date, pinned)
         XCTAssertTrue(model.cursor.pinned)
@@ -186,19 +240,24 @@ final class DataExplorerTests: XCTestCase {
     }
 
     func testAlertInvestigationPinsEvidenceAndRetainsItsValuesWithoutHistory() throws {
+        let suite = "MacPerfMonitorTests.ExplorerAlertRange.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         let date = Date(timeIntervalSince1970: 1_700_000_400)
         let alert = MacPerfMonitorCore.Alert(
             kind: .swap, title: "Swap growth", body: "3 to 4 GiB", date: date,
             evidence: AlertEvidence(
                 start: date.addingTimeInterval(-300), end: date, baseline: 3, current: 4))
         let request = try XCTUnwrap(AlertInvestigation(alerts: [alert]))
-        let model = DataExplorerModel()
+        let model = DataExplorerModel(preferences: defaults)
+        model.chooseWindow(.sixHours)
         model.investigate(request)
         XCTAssertFalse(model.followsLive)
         XCTAssertEqual(model.cursor.date, date)
         XCTAssertEqual(model.selectedLaneID, "swap")
         XCTAssertTrue(model.enabled.contains("swap"))
         XCTAssertEqual(model.alertEvidence.first?.evidence?.current, 4)
+        XCTAssertEqual(DataExplorerModel(preferences: defaults).span, 21600)
         model.toggleLive()
         XCTAssertTrue(model.alertEvidence.isEmpty)
     }

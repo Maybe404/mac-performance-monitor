@@ -13,7 +13,7 @@ struct InsightsView: View {
     @EnvironmentObject private var appState: AppState
 
     @State private var bundle = SamplerModel.InsightsBundle()
-    @State private var window: HistoryWindow = .oneHour
+    @StoredHistoryWindow("historyRange.insights") private var window
     @State private var metric: ConsumerMetric = .averageFootprint
     @State private var consumers: [ProcessConsumer] = []
     @State private var loadingBundle = false

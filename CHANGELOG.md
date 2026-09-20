@@ -6,6 +6,89 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-20
+
+### Added
+
+- **Ask About This Mac (Preview)** provides current reports and opt-in local AI
+  checks. Open Ask from the toolbar, app menu, or menu bar. Turn on explanations
+  separately to share readings with the model. It can request up to four
+  read-only data checks over the past seven days, then cite the readings behind
+  its answer. It cannot run commands, delete files, or change settings.
+
+- **Local model choices:** Apple on-device is the default on supported Macs
+  with macOS 26.4 or later and Apple Intelligence enabled. Optional Qwen3 4B,
+  Qwen3.5 4B, and DeepAnalyze 8B downloads are about 2.3 GB, 3.1 GB, and 5.0 GB.
+  These downloaded models need Apple silicon, at least 16 GiB RAM, and normal
+  memory pressure. Each has its own download and removal controls. Qwen3.5 and
+  DeepAnalyze are experimental and need an explicit download. Existing preview
+  selections remain unchanged; Ask never silently switches models.
+
+- Ask shows model readiness, progress through data checks, cited facts,
+  uncertainty, and a follow-up question. A pause notice explains resource limits.
+  Rejected answers give a specific reason while measured reports remain usable.
+  Closing Ask clears the conversation; no cloud inference or saved chat is used.
+
+- Six preview App Shortcuts open Ask or return current reports. Siri and
+  Shortcuts sharing needs its own consent and follows Apple's processing rules.
+  See the [Ask preview scope](docs/ai-integration-prd.md#generative-preview).
+
+- **GPU bandwidth history (Preview)** charts Total, Reads, and Writes together
+  in GB/s, with the same time range as utilization and hover details. Rates are
+  approximations from macOS bandwidth buckets, not exact byte counters. One quiet
+  caption explains the limits. New samples persist across restarts; missing
+  readings and older logs remain gaps.
+
+- **ANE Time** on macOS 27 uses kernel-accounted Neural Engine time, in ms/s.
+  It is not a percent of compute capacity or per-app attribution. GPU, Explorer,
+  and Ask distinguish partial coverage from missing readings.
+
+- **ANE Power** uses Apple's powermetrics through the approved Full Coverage
+  helper. It has a separate watts card, chart, and Explorer/Ask readings.
+  The GPU menu shows separate ANE time and power charts for the last 60 seconds.
+  Power is an estimate, not utilization; ANE Time does not need the helper.
+
+- **Usage Timeline** shows when the recorder observed a process running.
+  Right-click a process to open it. Optional Apple app and media activity is
+  separate and needs Full Disk Access plus a per-window opt-in. Its device and
+  foreground status are unverified; those optional records stay in memory only.
+
+### Changed
+
+- History views start at 30 minutes when no choice is saved. Each view keeps its
+  own range across tab changes, window closure, and app restarts. Explorer keeps
+  your chosen zoom span; opening alert evidence does not overwrite it.
+
+- The GPU tab's **Active** card is now **GPU awake**. It measures powered and
+  clocked time, including waits, not GPU workload. Clock-state help
+  explains that distinction. ANE Time and ANE Power cards sit next to each other.
+
+### Fixed
+
+- GPU Memory and GPU awake now have recorded card and detail charts. New
+  recordings retain averages, bounds, and valid-reading counts. Old records
+  remain unknown instead of showing invented values.
+
+- Missing or invalid GPU OFF-state readings no longer appear as 100% awake.
+
+- Main-window toolbar controls stay mounted while tab content loads or a window
+  reopens, avoiding the earlier first-open layout problem.
+
+### Build And Preview Limits
+
+- Source app bundles now need Xcode 27 for App Intents metadata and the Metal
+  Toolchain for local inference. Build scripts detect changed Metal toolchain
+  paths. Bundling includes inference resources and licences, preserves Sparkle,
+  and keeps model weights out of the app. The app's macOS 15 baseline is unchanged.
+
+- Generated answers can be wrong even when citations pass checks. Qwen3.5 and
+  DeepAnalyze still need real-model tests. Memory pressure can stop
+  inference on an otherwise eligible Mac. Current measured reports remain available.
+
+- New GPU history starts with new recordings. ANE counters depend on hardware
+  and macOS support. Native translation review, signed Siri/Shortcuts checks,
+  and wider workload testing remain release checks, not claims from unit tests.
+
 ## [2.1.0] - 2026-09-11
 
 ### Added
@@ -53,7 +136,7 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ## [2.0.0] - 2026-09-10
 
-See the [release notes](RELEASE_NOTES.md) for the short overview.
+See the [2.0.0 release notes](https://github.com/Zesty0wl/mac-performance-monitor/releases/tag/v2.0.0.231) for the short overview.
 
 ### Changed
 

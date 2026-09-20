@@ -111,6 +111,7 @@ private struct GeneralSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+            AskPreviewSettingsSection()
         }
         .formStyle(.grouped)
     }
@@ -498,7 +499,7 @@ private struct AdvancedSettingsView: View {
                 Text("Full Coverage")
             } footer: {
                 Text(
-                    "\(AppInfo.displayName) can install a small privileged helper so it can read the memory of system and other-user processes (such as WindowServer) that it otherwise cannot see. The helper runs only to read memory statistics and sends nothing off your Mac."
+                    "\(AppInfo.displayName) uses a privileged helper to read system processes and ANE power. Power sampling runs while GPU monitoring or history recording is active. Readings stay on your Mac."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

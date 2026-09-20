@@ -103,7 +103,8 @@ struct UsageTimelineView: View {
                             }
                         })
                 ) {
-                    ForEach([HistoryWindow.oneHour, .sixHours, .oneDay, .sevenDays]) { window in
+                    ForEach([HistoryWindow.thirtyMinutes, .oneHour, .sixHours, .oneDay, .sevenDays])
+                    { window in
                         Text(window.label).tag(window)
                     }
                 }

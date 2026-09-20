@@ -23,10 +23,38 @@ open when needed. The menu bar and history recorder have separate switches.
 
 Free and open source. No usage telemetry. Recorded samples stay on your Mac.
 
-[2.1 release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) ·
+[2.2 release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) ·
 [Documentation](docs/README.md)
 
 [![Explorer showing linked machine and process charts with a value inspector](docs/images/explorer.png)](docs/images/explorer.png)
+
+## New In 2.2
+
+This update adds more GPU history, an opt-in Ask preview, process usage timelines,
+and saved time ranges. The app still supports Apple silicon Macs on macOS 15 or later.
+
+- **GPU and Neural Engine:** Total, Reads, and Writes share a historical
+  bandwidth chart, marked Preview because the values are estimates from macOS
+  buckets. ANE Time and ANE Power are separate readings and charts. ANE Time
+  needs macOS 27; ANE Power needs the approved Full Coverage helper. GPU Memory
+  and GPU awake now have recorded detail charts.
+
+- **Ask About This Mac (Preview):** use current reports without AI, or opt in
+  to local questions and evidence-based explanations. Apple on-device is the
+  default where supported. Optional Qwen3, Qwen3.5, and DeepAnalyze choices keep
+  their own downloads. AI cannot run commands or change settings, and answers
+  can still be wrong. Siri and Shortcuts sharing needs separate consent.
+
+- **Usage Timeline:** right-click a process to see when the recorder observed
+  it running. Optional Apple app and media activity needs Full Disk Access and
+  a per-window opt-in. It is not verified foreground-use history.
+
+- **Saved ranges:** history views start at 30 minutes and remember their own
+  range. Explorer also keeps your chosen zoom span.
+
+New history grows from new recordings; older logs stay gaps for fields they
+never stored. See the [release notes](RELEASE_NOTES.md) for requirements and
+limits, and the [release checklist](docs/release-checklist.md) for verification details.
 
 ## New In 2.1
 
@@ -129,7 +157,9 @@ the window, with a setting to keep it visible.
   large or old files. Reveal items in Finder or open Quick Look.
 
 - **GPU:** see device and per-process activity, power, memory, and thermal
-  limits. Recognize AI runtimes such as Ollama, MLX, and LM Studio.
+  limits. The bandwidth preview adds history beside separate ANE time and
+  power, and recorded GPU memory and awake time. Recognize AI runtimes such
+  as Ollama, MLX, and LM Studio.
 
 - **Hardware:** browse a searchable inventory of the chip, memory, displays,
   storage, and connected devices. Refresh on demand or save a report.
@@ -138,6 +168,10 @@ the window, with a setting to keep it visible.
   consumers over time, and investigate processes with on-device diagnostics.
 
 ## Screenshots
+
+GPU, Ask, and Usage Timeline examples use the real native views with sample
+data. They illustrate the interface, not a benchmark or a verified AI diagnosis.
+Capture details are in the [release checklist](docs/release-checklist.md).
 
 ### Dashboard
 
@@ -151,45 +185,39 @@ A live process table with a detailed inspector for the selected process.
 
 ![Processes](docs/images/processes.png)
 
+### Process Usage Timeline
+
+Sampled running history and optional Apple activity occupy separate lanes.
+This example uses sample data, not a person's activity records.
+
+![Usage Timeline showing sampled running, app activity, and media activity separately](docs/images/usage-timeline.png)
+
+### Ask Preview
+
+Current measured reports remain available with AI off. This example uses
+sample readings. Questions, explanations, and Siri sharing have separate controls.
+
+![Ask Preview showing a current memory report with on-device AI off](docs/images/ask-preview.png)
+
 ### Energy
 
-Battery health, power flow, and the top energy users.
+Battery health, power flow, and accessory batteries. This overview is cropped
+to leave the battery serial number out of the image.
 
 ![Energy](docs/images/energy.png)
 
-### Network
-
-Traffic history and the network adapters on the Mac.
-
-![Network](docs/images/network.png)
-
-### Disk And Disk Map
-
-Drive activity, service time, health, and free space.
-
-![Disk](docs/images/disk.png)
-
-Explore disk usage by size, kind, age, or folder depth.
-
-![Disk Map](docs/images/disk-map.png)
-
 ### GPU
 
-Device activity and the processes using the GPU, with AI workloads identified.
+GPU memory and awake-time history, separate ANE cards, and the bandwidth
+Preview chart. The approximation caveat appears once beneath the chart.
+This current-source capture uses sample readings.
 
-![GPU](docs/images/gpu.png)
+![GPU preview showing recorded bandwidth for total, reads, and writes alongside utilization and clock states](docs/images/gpu.png)
 
-### Hardware
+ANE Time and ANE Power have independent units and history. These are sample
+readings, not evidence that an app used a particular processor.
 
-The current hardware inventory, with a visual chip overview.
-
-![Hardware](docs/images/hardware.png)
-
-### Insights
-
-Memory growth, pressure events, and the heaviest consumers.
-
-![Insights](docs/images/insights.png)
+![Separate Neural Engine activity and power charts with ms/s and watt axes](docs/images/gpu-neural-engine.png)
 
 ## Install
 
@@ -220,8 +248,11 @@ swift test
 Scripts/run.sh
 ```
 
-You need Apple silicon, macOS 15 (Sequoia) or later, and a Swift 6 toolchain
-from Xcode 16 or Swift.org. Bundling also needs Xcode's `xcstringstool`.
+You need Apple silicon and macOS 15 (Sequoia) or later. Building the current
+preview app bundle needs Xcode 27 for its App Intents metadata. Core builds
+and tests use Swift 6. The optional local-inference worker also needs Xcode's
+Metal Toolchain: install it with `xcodebuild -downloadComponent MetalToolchain`.
+Bundling needs Xcode's `xcstringstool` too. Model weights download separately.
 The run script uses a signing identity when available, or falls back to ad-hoc
 signing. Ad-hoc builds cannot use the privileged helper. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for signing options and test coverage.
@@ -231,9 +262,11 @@ signing. Ad-hoc builds cannot use the privileged helper. See
 No usage telemetry or analytics. Recorded performance data and alert evidence
 stay on your Mac. Exports leave it only when you choose to share them.
 
-Update checks, signed content downloads, and network tools make network requests.
-They do not upload your recorded performance history. The source is open for
-review so you can check what the app does.
+Update checks, model downloads, signed content downloads, and network tools
+make network requests. They do not upload your recorded performance history.
+Ask uses local models and clears its conversation when closed. Optional Siri
+and Shortcuts sharing follows Apple's processing rules and can pass results
+to other actions. See [Security and privacy](SECURITY.md) for these separate choices.
 
 ## Contributing
 
@@ -253,4 +286,7 @@ and review process.
 
 Released under the [MIT License](LICENSE). Bundles
 [GRDB.swift](https://github.com/groue/GRDB.swift) (MIT) and
-[Sparkle](https://sparkle-project.org) (MIT).
+[Sparkle](https://sparkle-project.org) (MIT). Local inference also uses
+[MLX](https://github.com/ml-explore/mlx-swift) and
+[llama.cpp](https://github.com/ggml-org/llama.cpp), with their dependency licences
+in the app bundle. Model downloads include their own licence and attribution files.

@@ -303,7 +303,14 @@ public enum Retention {
                     swap_used_min, cpu_die_min, gpu_die_min,
                     app_max, wired_max, compressed_max, cached_max, swap_used_max,
                     cpu_die_samples, gpu_die_samples, bucket_seconds,
-                    swap_in_avg, swap_out_avg, swap_in_max, swap_out_max, swap_activity_seconds)
+                    swap_in_avg, swap_out_avg, swap_in_max, swap_out_max, swap_activity_seconds,
+                    ane_time_avg, ane_time_max, ane_time_samples, ane_partial, ane_time_min,
+                    ane_power_min, ane_power_samples,
+                    gpu_memory_avg, gpu_memory_min, gpu_memory_max, gpu_memory_samples,
+                    gpu_active_avg, gpu_active_min, gpu_active_max, gpu_active_samples,
+                    gpu_bw_read_avg, gpu_bw_read_min, gpu_bw_read_max, gpu_bw_read_samples,
+                    gpu_bw_write_avg, gpu_bw_write_min, gpu_bw_write_max, gpu_bw_write_samples,
+                    gpu_bw_total_avg, gpu_bw_total_min, gpu_bw_total_max, gpu_bw_total_samples)
                 SELECT CAST(timestamp / \(b) AS INTEGER) * \(b) AS b,
                        AVG(pressure_percent), MAX(pressure_percent),
                        CAST(AVG(app_memory) AS INTEGER), CAST(AVG(wired) AS INTEGER),
@@ -320,7 +327,8 @@ public enum Retention {
                        AVG(disk_util), MAX(disk_util),
                        CAST(AVG(boot_free) AS INTEGER), MIN(boot_free), MAX(boot_total),
                        AVG(gpu_util), MAX(gpu_util), AVG(gpu_power), MAX(gpu_power),
-                       AVG(ane_power), MAX(ane_power),
+                       AVG(CASE WHEN ane_power_observed_at IS NOT NULL THEN ane_power END),
+                       MAX(CASE WHEN ane_power_observed_at IS NOT NULL THEN ane_power END),
                        AVG(cpu_die), MAX(cpu_die), AVG(gpu_die), MAX(gpu_die),
                        AVG(ssd_temp), MAX(ssd_temp), AVG(fan_rpm), MAX(fan_rpm),
                        MAX(thermal_state),
@@ -336,7 +344,18 @@ public enum Retention {
                          SUM(swap_in_rate * memory_interval) / NULLIF(SUM(CASE WHEN swap_in_rate IS NOT NULL THEN memory_interval END), 0),
                          SUM(swap_out_rate * memory_interval) / NULLIF(SUM(CASE WHEN swap_out_rate IS NOT NULL THEN memory_interval END), 0),
                          MAX(swap_in_rate), MAX(swap_out_rate),
-                         SUM(CASE WHEN swap_in_rate IS NOT NULL AND swap_out_rate IS NOT NULL THEN memory_interval END)
+                         SUM(CASE WHEN swap_in_rate IS NOT NULL AND swap_out_rate IS NOT NULL THEN memory_interval END),
+                         AVG(ane_time), MAX(ane_time), COUNT(ane_time),
+                         CASE WHEN COUNT(ane_time) > 0 THEN
+                             CASE WHEN COUNT(ane_time) < COUNT(*) OR MAX(COALESCE(ane_partial, 1)) > 0
+                                  THEN 1 ELSE 0 END END, MIN(ane_time),
+                         MIN(CASE WHEN ane_power_observed_at IS NOT NULL THEN ane_power END),
+                         COUNT(CASE WHEN ane_power_observed_at IS NOT NULL THEN ane_power END),
+                         AVG(gpu_memory), MIN(gpu_memory), MAX(gpu_memory), COUNT(gpu_memory),
+                         AVG(gpu_active), MIN(gpu_active), MAX(gpu_active), COUNT(gpu_active),
+                         AVG(gpu_bw_read), MIN(gpu_bw_read), MAX(gpu_bw_read), COUNT(gpu_bw_read),
+                         AVG(gpu_bw_write), MIN(gpu_bw_write), MAX(gpu_bw_write), COUNT(gpu_bw_write),
+                         AVG(gpu_bw_total), MIN(gpu_bw_total), MAX(gpu_bw_total), COUNT(gpu_bw_total)
                 FROM system_samples
                 WHERE timestamp >= ? AND timestamp < ?
                 GROUP BY b
@@ -414,7 +433,34 @@ public enum Retention {
                   swap_out_avg = excluded.swap_out_avg,
                   swap_in_max = excluded.swap_in_max,
                   swap_out_max = excluded.swap_out_max,
-                  swap_activity_seconds = excluded.swap_activity_seconds
+                                    swap_activity_seconds = excluded.swap_activity_seconds,
+                                    ane_time_avg = excluded.ane_time_avg,
+                                    ane_time_max = excluded.ane_time_max,
+                                    ane_time_samples = excluded.ane_time_samples,
+                                    ane_partial = excluded.ane_partial,
+                                    ane_time_min = excluded.ane_time_min,
+                                    ane_power_min = excluded.ane_power_min,
+                                    ane_power_samples = excluded.ane_power_samples,
+                                    gpu_memory_avg = excluded.gpu_memory_avg,
+                                    gpu_memory_min = excluded.gpu_memory_min,
+                                    gpu_memory_max = excluded.gpu_memory_max,
+                                    gpu_memory_samples = excluded.gpu_memory_samples,
+                                    gpu_active_avg = excluded.gpu_active_avg,
+                                    gpu_active_min = excluded.gpu_active_min,
+                                    gpu_active_max = excluded.gpu_active_max,
+                                    gpu_active_samples = excluded.gpu_active_samples,
+                                    gpu_bw_read_avg = excluded.gpu_bw_read_avg,
+                                    gpu_bw_read_min = excluded.gpu_bw_read_min,
+                                    gpu_bw_read_max = excluded.gpu_bw_read_max,
+                                    gpu_bw_read_samples = excluded.gpu_bw_read_samples,
+                                    gpu_bw_write_avg = excluded.gpu_bw_write_avg,
+                                    gpu_bw_write_min = excluded.gpu_bw_write_min,
+                                    gpu_bw_write_max = excluded.gpu_bw_write_max,
+                                    gpu_bw_write_samples = excluded.gpu_bw_write_samples,
+                                    gpu_bw_total_avg = excluded.gpu_bw_total_avg,
+                                    gpu_bw_total_min = excluded.gpu_bw_total_min,
+                                    gpu_bw_total_max = excluded.gpu_bw_total_max,
+                                    gpu_bw_total_samples = excluded.gpu_bw_total_samples
                 """, arguments: [watermark, completeUpTo])
 
         try SampleStore.rollBatteryHistory(
@@ -485,7 +531,14 @@ public enum Retention {
                     swap_used_min, cpu_die_min, gpu_die_min,
                     app_max, wired_max, compressed_max, cached_max, swap_used_max,
                     cpu_die_samples, gpu_die_samples, bucket_seconds,
-                    swap_in_avg, swap_out_avg, swap_in_max, swap_out_max, swap_activity_seconds)
+                    swap_in_avg, swap_out_avg, swap_in_max, swap_out_max, swap_activity_seconds,
+                    ane_time_avg, ane_time_max, ane_time_samples, ane_partial, ane_time_min,
+                    ane_power_min, ane_power_samples,
+                    gpu_memory_avg, gpu_memory_min, gpu_memory_max, gpu_memory_samples,
+                    gpu_active_avg, gpu_active_min, gpu_active_max, gpu_active_samples,
+                    gpu_bw_read_avg, gpu_bw_read_min, gpu_bw_read_max, gpu_bw_read_samples,
+                    gpu_bw_write_avg, gpu_bw_write_min, gpu_bw_write_max, gpu_bw_write_samples,
+                    gpu_bw_total_avg, gpu_bw_total_min, gpu_bw_total_max, gpu_bw_total_samples)
                 SELECT CAST(bucket / 3600 AS INTEGER) * 3600 AS b,
                        SUM(pressure_avg * samples) / SUM(samples), MAX(pressure_max),
                        CAST(SUM(app_avg * samples) / SUM(samples) AS INTEGER),
@@ -524,9 +577,8 @@ public enum Retention {
                        SUM(gpu_power_avg * samples)
                            / SUM(CASE WHEN gpu_power_avg IS NOT NULL THEN samples END),
                        MAX(gpu_power_max),
-                       SUM(ane_power_avg * samples)
-                           / SUM(CASE WHEN ane_power_avg IS NOT NULL THEN samples END),
-                       MAX(ane_power_max),
+                       SUM(ane_power_avg * ane_power_samples) / NULLIF(SUM(ane_power_samples), 0),
+                       MAX(CASE WHEN ane_power_samples > 0 THEN ane_power_max END),
                        CASE WHEN COUNT(cpu_die_samples) = COUNT(*)
                             THEN SUM(cpu_die_avg * cpu_die_samples) / NULLIF(SUM(cpu_die_samples), 0)
                             ELSE SUM(cpu_die_avg * samples)
@@ -579,7 +631,23 @@ public enum Retention {
                        3600,
                        SUM(swap_in_avg * swap_activity_seconds) / NULLIF(SUM(swap_activity_seconds), 0),
                        SUM(swap_out_avg * swap_activity_seconds) / NULLIF(SUM(swap_activity_seconds), 0),
-                       MAX(swap_in_max), MAX(swap_out_max), SUM(swap_activity_seconds)
+                       MAX(swap_in_max), MAX(swap_out_max), SUM(swap_activity_seconds),
+                       SUM(ane_time_avg * ane_time_samples) / NULLIF(SUM(ane_time_samples), 0),
+                       MAX(ane_time_max), SUM(ane_time_samples),
+                       CASE WHEN SUM(ane_time_samples) > 0 THEN
+                           CASE WHEN SUM(ane_time_samples) < SUM(samples) OR MAX(COALESCE(ane_partial, 1)) > 0
+                                THEN 1 ELSE 0 END END, MIN(ane_time_min),
+                      MIN(ane_power_min), SUM(ane_power_samples),
+                      SUM(gpu_memory_avg * gpu_memory_samples) / NULLIF(SUM(gpu_memory_samples), 0),
+                      MIN(gpu_memory_min), MAX(gpu_memory_max), SUM(gpu_memory_samples),
+                      SUM(gpu_active_avg * gpu_active_samples) / NULLIF(SUM(gpu_active_samples), 0),
+                        MIN(gpu_active_min), MAX(gpu_active_max), SUM(gpu_active_samples),
+                        SUM(gpu_bw_read_avg * gpu_bw_read_samples) / NULLIF(SUM(gpu_bw_read_samples), 0),
+                        MIN(gpu_bw_read_min), MAX(gpu_bw_read_max), SUM(gpu_bw_read_samples),
+                        SUM(gpu_bw_write_avg * gpu_bw_write_samples) / NULLIF(SUM(gpu_bw_write_samples), 0),
+                        MIN(gpu_bw_write_min), MAX(gpu_bw_write_max), SUM(gpu_bw_write_samples),
+                        SUM(gpu_bw_total_avg * gpu_bw_total_samples) / NULLIF(SUM(gpu_bw_total_samples), 0),
+                        MIN(gpu_bw_total_min), MAX(gpu_bw_total_max), SUM(gpu_bw_total_samples)
                 FROM system_minute
                 WHERE bucket >= ? AND bucket < ?
                 GROUP BY b
@@ -657,7 +725,34 @@ public enum Retention {
                   swap_out_avg = excluded.swap_out_avg,
                   swap_in_max = excluded.swap_in_max,
                   swap_out_max = excluded.swap_out_max,
-                  swap_activity_seconds = excluded.swap_activity_seconds
+                                    swap_activity_seconds = excluded.swap_activity_seconds,
+                                    ane_time_avg = excluded.ane_time_avg,
+                                    ane_time_max = excluded.ane_time_max,
+                                    ane_time_samples = excluded.ane_time_samples,
+                                    ane_partial = excluded.ane_partial,
+                                    ane_time_min = excluded.ane_time_min,
+                                    ane_power_min = excluded.ane_power_min,
+                                    ane_power_samples = excluded.ane_power_samples,
+                                    gpu_memory_avg = excluded.gpu_memory_avg,
+                                    gpu_memory_min = excluded.gpu_memory_min,
+                                    gpu_memory_max = excluded.gpu_memory_max,
+                                    gpu_memory_samples = excluded.gpu_memory_samples,
+                                    gpu_active_avg = excluded.gpu_active_avg,
+                                    gpu_active_min = excluded.gpu_active_min,
+                                    gpu_active_max = excluded.gpu_active_max,
+                                    gpu_active_samples = excluded.gpu_active_samples,
+                                    gpu_bw_read_avg = excluded.gpu_bw_read_avg,
+                                    gpu_bw_read_min = excluded.gpu_bw_read_min,
+                                    gpu_bw_read_max = excluded.gpu_bw_read_max,
+                                    gpu_bw_read_samples = excluded.gpu_bw_read_samples,
+                                    gpu_bw_write_avg = excluded.gpu_bw_write_avg,
+                                    gpu_bw_write_min = excluded.gpu_bw_write_min,
+                                    gpu_bw_write_max = excluded.gpu_bw_write_max,
+                                    gpu_bw_write_samples = excluded.gpu_bw_write_samples,
+                                    gpu_bw_total_avg = excluded.gpu_bw_total_avg,
+                                    gpu_bw_total_min = excluded.gpu_bw_total_min,
+                                    gpu_bw_total_max = excluded.gpu_bw_total_max,
+                                    gpu_bw_total_samples = excluded.gpu_bw_total_samples
                 """, arguments: [watermark, completeUpTo])
 
         try SampleStore.rollBatteryHistory(

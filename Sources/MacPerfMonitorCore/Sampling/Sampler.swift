@@ -71,6 +71,8 @@ public final class Sampler {
     /// the GPU reader — only touched while the GPU item is shown.
     private let powerReader = PowerReader()
     private let smcReader = SMCReader()
+    private let aneReader = ANEActivityReader()
+    private let anePowerReader = ANEPowerReader()
 
     /// Optional per-process network reader, backed by a long-lived `nettop`. Nil
     /// unless the user opts into per-app network tracking; far heavier than the
@@ -232,11 +234,14 @@ public final class Sampler {
     /// Call on the same serial queue the sampler ticks on.
     public func setPrivilegedReader(_ reader: PrivilegedReader?) {
         privilegedReader = reader
+        anePowerReader.setProvider(reader)
         // Fresh reader (or coverage turned off): clear any backoff so a newly
         // enabled/repaired helper is tried at once.
         privilegedFailureStreak = 0
         privilegedQuietUntil = nil
     }
+
+    public func stopANEPowerSampling() { anePowerReader.stop() }
 
     /// Install (or remove) the per-process network reader (a running `nettop`).
     /// Passing a reader starts per-app network attribution; nil stops it and
@@ -305,6 +310,10 @@ public final class Sampler {
         // second for the menu-bar icon and the history; every tick while a GPU
         // panel is open, since the driver's utilization figure moves between
         // sub-second reads).
+        if !readGPU {
+            aneReader.reset()
+            anePowerReader.stop()
+        }
         if readGPU,
             lastGPUReadAt.map({ now.timeIntervalSince($0) >= gpuReadInterval }) ?? true
         {
@@ -314,14 +323,22 @@ public final class Sampler {
             // reader succeeding; SMCReader throttles itself internally.
             if let thermal = smcReader.read(now: now) { cachedThermal = thermal }
             if freshGPU != nil {
+                let activity = aneReader.read()
+                let anePower = anePowerReader.read(at: now)
+                freshGPU?.anePowerWatts = anePower?.watts
+                freshGPU?.anePowerSampledAt = anePower?.timestamp
+                freshGPU?.anePowerSampleInterval = anePower?.interval
+                freshGPU?.anePowerRequiresHelper = anePowerReader.requiresHelper
+                freshGPU?.aneTimeMillisecondsPerSecond = activity?.millisecondsPerSecond
+                freshGPU?.aneSampleIsPartial = activity?.isPartial
                 if let power = powerReader.read(now: now) {
                     freshGPU?.gpuPowerWatts = power.gpuWatts
-                    freshGPU?.anePowerWatts = power.aneWatts
                     freshGPU?.cpuPowerWatts = power.cpuWatts
                     freshGPU?.performanceStates = power.gpuStates
                     freshGPU?.activeResidency = power.gpuActiveResidency
                     freshGPU?.throttled = power.gpuThrottled
                     freshGPU?.powerCapPercent = power.gpuPowerCapPercent
+                    freshGPU?.bandwidth = power.gpuBandwidth
                 }
                 if let thermal = cachedThermal {
                     // Prefer the GPU's own cluster sensors; fall back to the
@@ -784,6 +801,8 @@ public final class Sampler {
         cachedGPU = nil
         cachedThermal = nil
         lastGPUReadAt = nil
+        aneReader.reset()
+        anePowerReader.stop()
         networkReader.reset()
         diskReader.reset()
         bootVolumeReader.reset()
@@ -924,6 +943,16 @@ public final class Sampler {
         sample.swapOutPagesDelta = activity?.pagesOut
         sample.memoryPageSize = activity?.pageSize
         sample.memorySampleInterval = activity?.elapsed
+        sample.gpuMemoryBytes = gpu?.inUseMemoryBytes
+        sample.gpuActiveResidency = gpu?.activeResidency
+        let bandwidth = gpu?.bandwidth?.estimatedRates(at: now)
+        sample.gpuReadBandwidthGBps = bandwidth?.read
+        sample.gpuWriteBandwidthGBps = bandwidth?.write
+        sample.gpuTotalBandwidthGBps = bandwidth?.total
+        sample.anePowerSampledAt = gpu?.anePowerSampledAt
+        sample.anePowerSampleInterval = gpu?.anePowerSampleInterval
+        sample.aneTimeMillisecondsPerSecond = gpu?.aneTimeMillisecondsPerSecond
+        sample.aneSampleIsPartial = gpu?.aneSampleIsPartial
         // Assigned rather than passed: the memberwise call is already at the
         // type checker's practical limit, and every one of these is a plain
         // optional copy.

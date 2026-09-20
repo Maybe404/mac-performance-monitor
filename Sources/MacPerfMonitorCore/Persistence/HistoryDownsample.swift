@@ -158,6 +158,143 @@ extension Array where Element == SystemHistoryPoint {
                 voltageRailC: omax { $0.voltageRailC },
                 otherSensorC: omax { $0.otherSensorC }
             )
+            let aneCount = slice.reduce(0) { total, sample in
+                total
+                    + (sample.aneSampleCount
+                        ?? (sample.aneTimeMillisecondsPerSecond == nil ? 0 : 1))
+            }
+            point.aneSampleCount = aneCount
+            if aneCount > 0 {
+                let total = slice.reduce(0.0) { total, sample in
+                    total + (sample.aneTimeMillisecondsPerSecond ?? 0)
+                        * Double(
+                            sample.aneSampleCount
+                                ?? (sample.aneTimeMillisecondsPerSecond == nil ? 0 : 1))
+                }
+                point.aneTimeMillisecondsPerSecond = total / Double(aneCount)
+                point.aneSampleIsPartial = slice.contains {
+                    $0.aneTimeMillisecondsPerSecond == nil || $0.aneSampleIsPartial != false
+                }
+                let aneMinimum = slice.compactMap {
+                    $0.minima?.aneTimeMillisecondsPerSecond
+                        ?? ($0.bucketDuration == 0 ? $0.aneTimeMillisecondsPerSecond : nil)
+                }.min()
+                point.minima = SystemHistoryPeaks(
+                    pressurePercent: .nan, cpuLoad: .nan, networkInBytesPerSec: .nan,
+                    networkOutBytesPerSec: .nan, diskReadBytesPerSec: .nan,
+                    diskWriteBytesPerSec: .nan, aneTimeMillisecondsPerSecond: aneMinimum)
+            }
+            let powerCount = slice.reduce(0) { total, sample in
+                total + (sample.anePowerSampleCount ?? (sample.anePowerWatts == nil ? 0 : 1))
+            }
+            point.anePowerSampleCount = powerCount
+            if powerCount > 0 {
+                point.anePowerWatts =
+                    slice.reduce(0.0) { total, sample in
+                        total + (sample.anePowerWatts ?? 0)
+                            * Double(
+                                sample.anePowerSampleCount ?? (sample.anePowerWatts == nil ? 0 : 1))
+                    } / Double(powerCount)
+                var minima =
+                    point.minima
+                    ?? SystemHistoryPeaks(
+                        pressurePercent: .nan, cpuLoad: .nan, networkInBytesPerSec: .nan,
+                        networkOutBytesPerSec: .nan, diskReadBytesPerSec: .nan,
+                        diskWriteBytesPerSec: .nan)
+                minima.anePowerWatts = slice.compactMap {
+                    $0.minima?.anePowerWatts ?? ($0.bucketDuration == 0 ? $0.anePowerWatts : nil)
+                }.min()
+                point.minima = minima
+            } else {
+                point.anePowerWatts = nil
+            }
+            let memoryCount = slice.reduce(0) { total, sample in
+                total + (sample.gpuMemorySampleCount ?? (sample.gpuMemoryBytes == nil ? 0 : 1))
+            }
+            point.gpuMemorySampleCount = memoryCount
+            if memoryCount > 0 {
+                point.gpuMemoryBytes =
+                    slice.reduce(0.0) { total, sample in
+                        total + (sample.gpuMemoryBytes ?? 0)
+                            * Double(
+                                sample.gpuMemorySampleCount
+                                    ?? (sample.gpuMemoryBytes == nil ? 0 : 1))
+                    } / Double(memoryCount)
+                var minima =
+                    point.minima
+                    ?? SystemHistoryPeaks(
+                        pressurePercent: .nan, cpuLoad: .nan, networkInBytesPerSec: .nan,
+                        networkOutBytesPerSec: .nan, diskReadBytesPerSec: .nan,
+                        diskWriteBytesPerSec: .nan)
+                minima.gpuMemoryBytes = slice.compactMap {
+                    $0.minima?.gpuMemoryBytes ?? ($0.bucketDuration == 0 ? $0.gpuMemoryBytes : nil)
+                }.min()
+                point.minima = minima
+            }
+            let activeCount = slice.reduce(0) { total, sample in
+                total + (sample.gpuActiveSampleCount ?? (sample.gpuActiveResidency == nil ? 0 : 1))
+            }
+            point.gpuActiveSampleCount = activeCount
+            if activeCount > 0 {
+                point.gpuActiveResidency =
+                    slice.reduce(0.0) { total, sample in
+                        total + (sample.gpuActiveResidency ?? 0)
+                            * Double(
+                                sample.gpuActiveSampleCount
+                                    ?? (sample.gpuActiveResidency == nil ? 0 : 1))
+                    } / Double(activeCount)
+                var minima =
+                    point.minima
+                    ?? SystemHistoryPeaks(
+                        pressurePercent: .nan, cpuLoad: .nan, networkInBytesPerSec: .nan,
+                        networkOutBytesPerSec: .nan, diskReadBytesPerSec: .nan,
+                        diskWriteBytesPerSec: .nan)
+                minima.gpuActiveResidency = slice.compactMap {
+                    $0.minima?.gpuActiveResidency
+                        ?? ($0.bucketDuration == 0 ? $0.gpuActiveResidency : nil)
+                }.min()
+                point.minima = minima
+            }
+            let bandwidthColumns:
+                [(
+                    WritableKeyPath<SystemHistoryPoint, Double?>,
+                    WritableKeyPath<SystemHistoryPoint, Int?>,
+                    WritableKeyPath<SystemHistoryPeaks, Double?>
+                )] = [
+                    (\.gpuReadBandwidthGBps, \.gpuReadBandwidthSampleCount, \.gpuReadBandwidthGBps),
+                    (
+                        \.gpuWriteBandwidthGBps, \.gpuWriteBandwidthSampleCount,
+                        \.gpuWriteBandwidthGBps
+                    ),
+                    (
+                        \.gpuTotalBandwidthGBps, \.gpuTotalBandwidthSampleCount,
+                        \.gpuTotalBandwidthGBps
+                    ),
+                ]
+            for (value, count, bound) in bandwidthColumns {
+                var weight = 0
+                var total = 0.0
+                for sample in slice {
+                    guard let rate = sample[keyPath: value], rate.isFinite else { continue }
+                    let readings = Swift.max(0, sample[keyPath: count] ?? 1)
+                    weight += readings
+                    total += rate * Double(readings)
+                }
+                point[keyPath: count] = weight
+                guard weight > 0 else { continue }
+                point[keyPath: value] = total / Double(weight)
+                var minima =
+                    point.minima
+                    ?? SystemHistoryPeaks(
+                        pressurePercent: .nan, cpuLoad: .nan, networkInBytesPerSec: .nan,
+                        networkOutBytesPerSec: .nan, diskReadBytesPerSec: .nan,
+                        diskWriteBytesPerSec: .nan)
+                minima[keyPath: bound] = slice.compactMap {
+                    $0.minima?[keyPath: bound]
+                        ?? ($0.bucketDuration == 0 ? $0[keyPath: value] : nil)
+                }.min()
+                point.minima = minima
+            }
             // The bucket's peak is the highest peak among its members (a raw
             // member's peak being itself), so a band drawn over the result
             // still reaches the real spike.

@@ -1,15 +1,18 @@
 # Documentation
 
-Use these guides for Mac Performance Monitor 2.1. The source branch is `main`.
+These guides describe Mac Performance Monitor 2.2 and the source on `main`.
 Published packages and Homebrew follow public releases, not every source change.
 
 ## Product And Support
 
 - [Project overview and screenshots](../README.md).
 
-- [2.1 release notes](../RELEASE_NOTES.md) and [changelog](../CHANGELOG.md).
+- [2.2 release notes](../RELEASE_NOTES.md) and [changelog](../CHANGELOG.md).
 
 - [Energy](energy-design.md): card details, runtime forecasts, and battery history.
+
+- [GPU](gpu-tab-design.md): bandwidth history, GPU awake, ANE Time, ANE Power,
+  and the limits of each measurement.
 
 - [Explorer](explorer-design.md): investigate recorded and live data at a chosen time.
 
@@ -35,14 +38,21 @@ Published packages and Homebrew follow public releases, not every source change.
   upgrade testing and publication. [Homebrew](homebrew-submission.md) covers
   the distribution handoff.
 
+## Preview And Plans
+
+- [AI integration PRD](ai-integration-prd.md) describes the full target for
+  Siri and on-device answers. Its [generative preview](ai-integration-prd.md#generative-preview)
+  section records the opt-in implementation on main, its limits, and
+  the checks still needed before a public release.
+
 ## Design History
 
 Earlier design and investigation notes remain available for context. Their
 dated observations, proposed work, and old names such as Analytics are not
 current product guarantees. Prefer the guides above for shipped behavior.
 
-- [App presence](app-presence-design.md), [GPU](gpu-tab-design.md),
-  [temperature](temperature-design.md), and [Disk Map](disk-map-design.md).
+- [App presence](app-presence-design.md), [temperature](temperature-design.md),
+  and [Disk Map](disk-map-design.md).
 
 - [Earlier chart policy](chart-rules.md), superseded for Dashboard and Explorer.
 

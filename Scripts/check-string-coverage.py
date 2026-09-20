@@ -38,7 +38,7 @@ CATALOG = os.path.join(ROOT, "Localizations/Localizable.xcstrings")
 # reason with the entry: an allowlist nobody can audit rots.
 NOT_TRANSLATED = {
     # Composition: placeholders, separators and glyphs, with no word in them.
-    " · ", " — %@", "%@ %@ (%@)", "%@ (%@)", "%@ / %@", "%@ · %@", "%@ → %@",
+    "%@", " · ", " — %@", "%@ %@ (%@)", "%@ (%@)", "%@ / %@", "%@ · %@", "%@ → %@",
     "%@: %@", "%lld", "%lld %@", "%lld / %lld", "%lld/%lld", "%lld%%", "%u",
     "%u%%", "×%lld", "+%@", "--", ". ", "·", "—", "•", "›", "",
     # Units and identifiers that read the same in every language. PID, MAC and
@@ -77,7 +77,7 @@ def compiler_keys(destination):
     """Every localization key the Swift compiler emits, key -> source file."""
     print("building with -emit-localized-strings ...", file=sys.stderr)
     result = subprocess.run(
-        ["swift", "build",
+        ["swift", "build", "--product", "MacPerfMonitor",
          "-Xswiftc", "-emit-localized-strings",
          "-Xswiftc", "-emit-localized-strings-path",
          "-Xswiftc", destination],
@@ -85,7 +85,14 @@ def compiler_keys(destination):
     if result.returncode != 0:
         print(result.stderr[-2000:], file=sys.stderr)
         raise SystemExit("build failed")
-    return read_stringsdata(destination)
+    emitted = read_stringsdata(destination)
+    if not emitted:
+        app_objects = os.path.join(
+            ROOT, ".build", "out", "Intermediates.noindex", "MacPerfMonitor.build",
+            "Debug", "MacPerfMonitor-p.build", "Objects-normal", "*")
+        for directory in glob.glob(app_objects):
+            emitted.update(read_stringsdata(directory))
+    return emitted
 
 
 def main():
@@ -107,6 +114,10 @@ def main():
     else:
         with tempfile.TemporaryDirectory() as destination:
             emitted = compiler_keys(destination)
+
+    if not emitted:
+        print("error: no app localization keys were emitted", file=sys.stderr)
+        return 1
 
     uncarried = {k: v for k, v in emitted.items() if k not in catalog}
     missing = {k: v for k, v in uncarried.items() if k not in NOT_TRANSLATED}

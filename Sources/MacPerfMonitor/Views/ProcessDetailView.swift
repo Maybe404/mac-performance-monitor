@@ -18,7 +18,7 @@ struct ProcessDetailView: View {
     @Environment(\.samplerModel) private var model
     let identity: ProcessIdentity
 
-    @State private var range: HistoryWindow = .oneHour
+    @StoredHistoryWindow("historyRange.processDetail") private var range
     /// The chart series, owned here as a stable reference and observed only by
     /// the charts leaf.
     @State private var store = ProcessDetailStore()

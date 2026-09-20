@@ -80,16 +80,24 @@ final class BatteryTests: XCTestCase {
         do {
             let pool = try DatabasePool(path: legacyURL.path)
             try MacPerfMonitorDatabase.migrator.migrate(pool, upTo: "v18-swap-activity")
-            let legacyStore = SampleStore(pool: pool)
-            var sample = Make.system(timestamp: timestamp)
-            sample.batteryPresent = true
-            sample.batteryCharge = 75
-            sample.batteryHealthPercent = 94
-            sample.batteryTemperatureCelsius = 30
-            try legacyStore.insert(systemSample: sample)
+            try pool.write { db in
+                try db.execute(
+                    sql: """
+                        INSERT INTO system_samples
+                        (timestamp, total_ram, free, active, inactive, wired, speculative, compressed,
+                         app_memory, cached_files, swap_total, swap_used, pressure_level, pressure_percent,
+                         page_ins, page_outs, compressions, decompressions,
+                         page_ins_delta, page_outs_delta, compressions_delta, decompressions_delta, cpu_load,
+                         battery_present, battery_charge, battery_health, battery_temp)
+                        VALUES (?,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,75,94,30)
+                        """, arguments: [timestamp.timeIntervalSince1970])
+            }
         }
 
         let migratedStore = try SampleStore(url: legacyURL)
+        let latest = try XCTUnwrap(try migratedStore.latestSystemSample())
+        XCTAssertNil(latest.aneTimeMillisecondsPerSecond)
+        XCTAssertNil(latest.aneSampleIsPartial)
         let history = try migratedStore.batteryHistory(.oneHour, now: timestamp)
         XCTAssertEqual(history.count, 1)
         let point = try XCTUnwrap(history.first)

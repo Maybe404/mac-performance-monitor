@@ -1,6 +1,34 @@
 import MacPerfMonitorCore
 import SwiftUI
 
+@propertyWrapper
+struct StoredHistoryWindow: DynamicProperty {
+    @AppStorage private var saved: HistoryWindow
+    @State private var preview: HistoryWindow
+    private let usesPreview: Bool
+
+    init(_ key: String, initialValue: HistoryWindow? = nil, store: UserDefaults? = nil) {
+        _saved = AppStorage(wrappedValue: .thirtyMinutes, key, store: store)
+        _preview = State(initialValue: initialValue ?? .thirtyMinutes)
+        usesPreview = initialValue != nil
+    }
+
+    var wrappedValue: HistoryWindow {
+        get { usesPreview ? preview : saved }
+        nonmutating set {
+            if usesPreview {
+                preview = newValue
+            } else {
+                saved = newValue
+            }
+        }
+    }
+
+    var projectedValue: Binding<HistoryWindow> {
+        Binding(get: { wrappedValue }, set: { wrappedValue = $0 })
+    }
+}
+
 /// Gates a history time-range control behind the app's function mode.
 ///
 /// In full mode the wrapped control behaves normally. In menu-bar-only mode there

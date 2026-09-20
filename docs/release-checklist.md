@@ -1,5 +1,132 @@
 # Release Checklist
 
+## 2.2.0 Release
+
+The maintainer approved publishing 2.2.0 on 20 September 2026. The candidate is
+build 260, compared with public 2.1.0 build 236. The release is not public until
+the draft artifacts have passed the checks below.
+
+- [x] Approve version 2.2.0 and retain the disclosed Preview and experimental limits.
+- [x] Finalize the dated changelog and release notes, including version-pinned links.
+- [ ] Commit and push the exact release source, excluding private local notes and data.
+- [ ] Pass hosted CI on macOS 15 and the Xcode 27 runner.
+- [ ] Sign and notarize the app and installer with the existing Apple identities.
+- [ ] Verify nested signatures, staples, package contents, languages, and installed launch.
+- [ ] Embed the release notes in Sparkle and verify the archive with the public key from 2.1.0.
+- [ ] Pin the release tag to the verified source commit and check downloaded draft assets.
+- [ ] Publish the same bytes and verify public installer, archive, and update-feed URLs.
+- [ ] Update and test the Homebrew cask against the final package checksum.
+
+The broader model, Siri, translation, and workload checks listed in preparation
+remain disclosed limitations. A passing unit suite or runtime smoke check does
+not establish diagnostic accuracy. No cloud fallback or model download is enabled
+as part of publishing.
+
+## Sunday Release Preparation (20 September 2026)
+
+Preparation used **2.1.0, build 236** (`v2.1.0.236`) as its comparison baseline.
+Version 2.2.0 was proposed here and later approved in the release record above.
+The completed preparation results below predate the final release build.
+
+### Release Materials
+
+- [x] Check all changes since 2.1.0, including work not yet committed.
+- [x] Group the changelog by what users get. Include Usage Timeline, Ask, GPU,
+  Neural Engine readings, saved ranges, and fixes. State the limits.
+- [x] Write draft release notes. Keep download links on the public release.
+- [x] Update the README and guide index.
+- [x] Review the images. Refresh GPU for bandwidth history, ANE Time, ANE Power,
+  and GPU awake. Check Ask and Usage Timeline too.
+- [x] Check links, image paths, translated string coverage, and release wording.
+  Native translation approval remains a separate check below.
+
+### Candidate Verification
+
+- [x] Run all tests, strict Swift lint, both language checks, and the catalog
+  compiler. Record skips and the source tested.
+- [x] Build an isolated optimized app and verify its packaged runtime resources.
+  This is an ad-hoc-signed check, not a notarized release candidate.
+- [ ] Run hosted CI on the final committed source. Confirm its toolchain tests
+  the Xcode 27 AI and App Intents code, not just older-compiler fallback paths.
+- [x] Test an upgrade fixture from the 2.1.0 schema with stored CPU, GPU, and
+  battery readings. Retain those values and leave new GPU fields unknown.
+- [ ] Test the final signed upgrade with a backed-up user database. The fixture
+  above does not replace a package upgrade or a full database soak.
+- [ ] Test the signed app: GPU, ANE power through the helper, Ask consent, Stop,
+  and model downloads. A test fixture does not replace these checks.
+- [ ] Decide whether the new experimental models should ship. Record real-model
+  tests and state any gaps in coverage.
+- [ ] Test Siri, Shortcuts, and older supported macOS versions.
+- [ ] Get native speakers to review new text. Run a longer monitoring session.
+
+### Local Verification
+
+Completed on 20 September using Xcode 27 and Swift 6.4. The tested tree is local
+work on `main` after `c54ca47`, not a final release commit. Source metadata and
+the installed app remain **2.1.0, build 258**. No version bump, install, tag,
+push, notarization, or public upload was performed during preparation.
+
+- Full suite: **1,021 tests**, 15 expected opt-in skips, no failures. Counts are
+  174 app, 17 IPC, and 830 Core tests. Tests requiring real models or explicit
+  private data were not enabled for this run.
+- Strict Swift lint, editor checks, shell syntax, and whitespace checks pass.
+- All **2,829 catalog keys** have four-language coverage. The compiled bundle's
+  English, German, French, and Simplified Chinese values match the source catalog.
+  Compiler extraction found 1,238 UI keys with none missing from the catalog.
+- The populated schema-v20 upgrade fixture passes. Existing CPU, GPU, and battery
+  values survive; newer bandwidth, memory, awake-time, and ANE fields stay unknown.
+- The optimized bundle is at `build/release-preparation/Mac Performance Monitor.app`.
+  Its ad-hoc signatures pass deep and strict verification. Sparkle, App Intents
+  metadata, inference resources, licences, and language bundles are present.
+- MLX and GGUF runtime checks pass with outbound network and `.build` reads
+  denied. Only the unprivileged inference worker links llama.cpp. The app bundle
+  contains no model weights. These checks do not test real-model answer quality.
+
+Logs are under ignored `build/release-preparation`, including `full-suite.log`,
+`release-build.log`, `string-coverage.log`, and `gguf-runtime.log`. The final
+release must rerun its required checks after the version and commit are fixed.
+
+### Screenshot Audit
+
+Reviewed on 20 September. These are documentation assets, not proof that the
+final signed release has passed its smoke tests. No private Apple activity or
+AI conversations were read for the new examples. The app returned to its GPU
+tab after capture; recording and AI consent settings were not changed.
+
+| Image | Action And Source |
+| --- | --- |
+| [GPU](images/gpu.png) | Replaced. Current-source native GPU view with sample data, six cards, bandwidth history, Preview label, and one shared caveat. |
+| [Neural Engine](images/gpu-neural-engine.png) | Added. Same sample-data view, scrolled to the separate time and power charts. |
+| [Ask](images/ask-preview.png) | Added. Native current-report fixture with AI off. No claim of a real model result. |
+| [Usage Timeline](images/usage-timeline.png) | Added. Native fixture for an example Editor app. All activity lanes use synthetic data. |
+| [Dashboard](images/dashboard.png) | Refreshed from installed 2.1.0 build 258, including current toolbar and saved 30-minute range. |
+| [Processes](images/processes.png) | Refreshed from build 258. Cropped to the process overview and inspector. |
+| [Energy](images/energy.png) | Refreshed from build 258. Top-of-window crop excludes the battery serial panel. |
+| [Explorer](images/explorer.png) | Retained the earlier reviewed capture with populated process comparisons. The new capture had no selected processes and was less useful. |
+| Network, Disk, Disk Map, Hardware, Insights | Older layouts still showed Analytics; some included identifiers or file paths. Removed from the current README gallery. Original files remain for existing links. |
+
+Native capture tests live in the existing GPU, Ask, and Usage Timeline test
+files. Raw captures remain under ignored `build/release-preparation/screenshots`.
+Do not publish that folder wholesale. Only the reviewed assets above belong
+in the gallery. New GPU captures are source previews, not final signed-app captures.
+
+### Publication Hold
+
+Install and deploy scripts are not dry runs. They can change versions, install
+the app, sign files, or publish them. Get approval before those steps.
+
+For release, confirm the version and choose a clean source commit. Run CI on
+that commit. Build and sign once. Check the package and Sparkle feed with the
+existing key. Download and check the draft files before making them public.
+Until then, leave the cask, public feed, tags, and website unchanged.
+
+The release workflow now runs on both `macos-15` and `xcode-27`. Local success
+does not replace hosted results for the final release commit.
+
+Before uploading, remove the draft labels and pin release-note links to the
+final tag. Refresh website images with new versioned URLs in its separate repo;
+this preparation does not deploy the website or change cached public assets.
+
 ## 2.1.0 Release
 
 The maintainer approved publishing 2.1.0 from `main` on 11 September 2026.

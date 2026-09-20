@@ -278,6 +278,61 @@ final class SamplerModel: ObservableObject {
     /// the cheap system sample. Read and written only on `queue`.
     private var processConsumers = 0
 
+    private struct AskReadRequest {
+        let minimumScanCount: UInt64
+        let continuation: CheckedContinuation<[AskReport], Error>
+    }
+
+    private final class AskReadCancellation: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+        var isCancelled: Bool { lock.withLock { cancelled } }
+        func cancel() { lock.withLock { cancelled = true } }
+    }
+
+    private var askReadRequests: [UUID: AskReadRequest] = [:]
+    private var askScanCount: UInt64 = 0
+    private var askSystemHasBaseline = false
+
+    func readAskReport(topic: AskTopic) async throws -> AskReport {
+        try await readAskReports().first(where: { $0.topic == topic })
+            ?? AskReport.make(topic: topic, snapshot: nil)
+    }
+
+    func readAskReports() async throws -> [AskReport] {
+        let requestID = UUID()
+        let cancellation = AskReadCancellation()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async {
+                    guard !cancellation.isCancelled else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    guard self.timer != nil, self.askReadRequests.count < 4 else {
+                        continuation.resume(returning: [])
+                        return
+                    }
+                    self.askReadRequests[requestID] = AskReadRequest(
+                        minimumScanCount: self.askScanCount + 2,
+                        continuation: continuation)
+                    self.tick(forceHeavy: true)
+                    self.queue.asyncAfter(deadline: .now() + 8) { [weak self] in
+                        guard let request = self?.askReadRequests.removeValue(forKey: requestID)
+                        else { return }
+                        request.continuation.resume(returning: [])
+                    }
+                }
+            }
+        } onCancel: {
+            cancellation.cancel()
+            self.queue.async {
+                self.askReadRequests.removeValue(forKey: requestID)?.continuation.resume(
+                    throwing: CancellationError())
+            }
+        }
+    }
+
     // MARK: Dial-rate refresh of the rows on screen
 
     /// The processes whose table rows are on screen, as the table reports
@@ -626,6 +681,7 @@ final class SamplerModel: ObservableObject {
 
     func stop() {
         queue.async { [weak self] in
+            self?.sampler.stopANEPowerSampling()
             self?.timer?.cancel()
             self?.timer = nil
             self?.pressureMonitor?.stop()
@@ -671,6 +727,7 @@ final class SamplerModel: ObservableObject {
     func setAlertConfig(_ config: AlertConfig) {
         queue.async {
             self.alertConfig = config
+            self.updateANEPowerDemand()
             if !config.anyEnabled {
                 self.alertEngine.reset()
                 self.incidentStore?.save(self.alertEngine.incidentSnapshot)
@@ -930,6 +987,7 @@ final class SamplerModel: ObservableObject {
         queue.async { [weak self] in
             guard let self, enabled != self.persistenceEnabled else { return }
             self.persistenceEnabled = enabled
+            self.updateANEPowerDemand()
             self.persistenceGeneration &+= 1
             if enabled {
                 if self.store == nil {
@@ -964,7 +1022,11 @@ final class SamplerModel: ObservableObject {
     /// installs / removes itself, so the IOAccelerator registry is read only while
     /// the GPU read-out is actually shown — nothing otherwise.
     func setGPUSamplingEnabled(_ enabled: Bool) {
-        queue.async { [weak self] in self?.gpuSamplingEnabled = enabled }
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.gpuSamplingEnabled = enabled
+            self.updateANEPowerDemand()
+        }
     }
 
     /// Surfaces that show GPU detail (the GPU tab, an open GPU dropdown)
@@ -980,7 +1042,16 @@ final class SamplerModel: ObservableObject {
         queue.async { [weak self] in
             guard let self else { return }
             self.gpuConsumers = max(0, self.gpuConsumers - 1)
+            self.updateANEPowerDemand()
         }
+    }
+
+    private var wantsGPUSampling: Bool {
+        gpuSamplingEnabled || gpuConsumers > 0 || persistenceEnabled || alertConfig.highGPUEnabled
+    }
+
+    private func updateANEPowerDemand() {
+        if !wantsGPUSampling { sampler.stopANEPowerSampling() }
     }
 
     /// Register a live consumer of per-process data (an open menu-bar popover that
@@ -1086,9 +1157,9 @@ final class SamplerModel: ObservableObject {
         // recorded nor charted: a recorded zero starts every run after a gap
         // with a vertical climb from the axis.
         let hasBaseline = sampler.hasBaseline
+        askSystemHasBaseline = hasBaseline
         let (system, cpu, battery, network, disk, gpu) = sampler.tickSystem(
-            readGPU: gpuSamplingEnabled || gpuConsumers > 0 || persistenceEnabled
-                || alertConfig.highGPUEnabled,
+            readGPU: wantsGPUSampling,
             gpuReadInterval: gpuConsumers > 0 ? 0 : 1)
         lastSystemTick = (system, cpu, battery, network, disk, gpu)
         diagnostics.recordSystemTick(duration: TickDiagnostics.now() - tickStart)
@@ -1124,13 +1195,15 @@ final class SamplerModel: ObservableObject {
         // below from the cheap tick.
         let processAlerts = alertConfig.processCeilingEnabled || alertConfig.leakEnabled
         let interactive = processConsumers > 0 || popoverOpen
-        let needProcesses = persistenceEnabled || interactive || processAlerts
+        let needProcesses =
+            persistenceEnabled || interactive || processAlerts || !askReadRequests.isEmpty
         // When alerts are the *only* reason to scan, do it on a slow cadence:
         // the scan is the expensive part of a tick, and a leak or ceiling alert
         // that arrives within the minute is soon enough. Recording or anything
         // on screen goes back to the usual cadences.
         alertScanTickCounter += 1
-        let alertsAreTheOnlyReason = !persistenceEnabled && !interactive && processAlerts
+        let alertsAreTheOnlyReason =
+            !persistenceEnabled && !interactive && processAlerts && askReadRequests.isEmpty
         let alertScanDue = alertScanTickCounter >= alertScanEveryTicks
         // Two cadences: the fine SCAN (feeds persistence + trails + popover) runs at
         // `heavyEveryTicks`; the main-window UI publish/alerts run at the coarser
@@ -1143,7 +1216,9 @@ final class SamplerModel: ObservableObject {
         // Refresh dial (the table re-sorted on every event) and piled
         // main-thread work onto a Mac that is already struggling.
         let force = forceHeavy || forceHeavyPending
-        let scanDue = force || !hasProcessSnapshot || heavyTickCounter >= heavyEveryTicks
+        let scanDue =
+            force || !hasProcessSnapshot || heavyTickCounter >= heavyEveryTicks
+            || !askReadRequests.isEmpty
         let tableDue = !hasProcessSnapshot || tableTickCounter >= tableEveryTicks
         let alertsDue =
             force
@@ -1338,6 +1413,19 @@ final class SamplerModel: ObservableObject {
             system: last.system, processes: result.processes,
             unreadableProcessCount: result.unreadableProcessCount, cpu: last.cpu,
             battery: last.battery, network: last.network, disk: last.disk)
+        askScanCount += 1
+        if askSystemHasBaseline {
+            let ready = askReadRequests.filter { $0.value.minimumScanCount <= askScanCount }
+            for (requestID, request) in ready {
+                askReadRequests.removeValue(forKey: requestID)
+                request.continuation.resume(
+                    returning: AskTopic.allCases.map {
+                        AskReport.make(
+                            topic: $0, snapshot: snapshot,
+                            networkTrackingEnabled: perAppNetworkEnabled)
+                    })
+            }
+        }
         if !didLogFirstTick {
             didLogFirstTick = true
             AppLog.sampler.notice(
@@ -2524,6 +2612,21 @@ final class SamplerModel: ObservableObject {
             }
             DispatchQueue.main.async { completion(result) }
         }
+    }
+
+    func readAskData(
+        _ call: AskToolCall, at capturedAt: Date, process: ProcessIdentity?
+    ) async throws -> AskDataRead {
+        try Task.checkCancellation()
+        guard let store else { throw AskInvestigationError.unavailable }
+        let result: AskDataRead = try await withCheckedThrowingContinuation { continuation in
+            readQueue.async {
+                continuation.resume(
+                    with: Result { try store.readAskData(call, at: capturedAt, process: process) })
+            }
+        }
+        try Task.checkCancellation()
+        return result
     }
 
     func searchExplorerProcesses(

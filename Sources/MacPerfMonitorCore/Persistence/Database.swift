@@ -267,6 +267,60 @@ public enum MacPerfMonitorDatabase {
                 }
             }
         }
+        migrator.registerMigration("v21-ane-accounting") { db in
+            try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN ane_time REAL")
+            try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN ane_partial INTEGER")
+            for table in ["system_minute", "system_hour"] {
+                for (column, type) in [
+                    ("ane_time_avg", "REAL"), ("ane_time_min", "REAL"), ("ane_time_max", "REAL"),
+                    ("ane_time_samples", "INTEGER"), ("ane_partial", "INTEGER"),
+                ] {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+                }
+            }
+        }
+        migrator.registerMigration("v22-ane-power-source") { db in
+            try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN ane_power_observed_at REAL")
+            try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN ane_power_interval REAL")
+            for table in ["system_minute", "system_hour"] {
+                try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN ane_power_min REAL")
+                try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN ane_power_samples INTEGER")
+            }
+        }
+        migrator.registerMigration("v23-gpu-memory-history") { db in
+            try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN gpu_memory INTEGER")
+            for table in ["system_minute", "system_hour"] {
+                for (column, type) in [
+                    ("gpu_memory_avg", "REAL"), ("gpu_memory_min", "REAL"),
+                    ("gpu_memory_max", "REAL"), ("gpu_memory_samples", "INTEGER"),
+                ] {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+                }
+            }
+        }
+        migrator.registerMigration("v24-gpu-awake-history") { db in
+            try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN gpu_active REAL")
+            for table in ["system_minute", "system_hour"] {
+                for (column, type) in [
+                    ("gpu_active_avg", "REAL"), ("gpu_active_min", "REAL"),
+                    ("gpu_active_max", "REAL"), ("gpu_active_samples", "INTEGER"),
+                ] {
+                    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
+                }
+            }
+        }
+        migrator.registerMigration("v25-gpu-bandwidth-history") { db in
+            for metric in ["gpu_bw_read", "gpu_bw_write", "gpu_bw_total"] {
+                try db.execute(sql: "ALTER TABLE system_samples ADD COLUMN \(metric) REAL")
+                for table in ["system_minute", "system_hour"] {
+                    for suffix in ["avg", "min", "max", "samples"] {
+                        let type = suffix == "samples" ? "INTEGER" : "REAL"
+                        try db.execute(
+                            sql: "ALTER TABLE \(table) ADD COLUMN \(metric)_\(suffix) \(type)")
+                    }
+                }
+            }
+        }
         return migrator
     }
 }

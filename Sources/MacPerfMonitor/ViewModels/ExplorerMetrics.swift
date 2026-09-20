@@ -31,7 +31,7 @@ enum ExplorerSourceGroup: String, CaseIterable, Identifiable {
 
 enum ExplorerUnit {
     case percent, index, bytes, rate, count, watts, celsius, rpm, milliseconds, seconds, joules,
-        thermalState
+        thermalState, millisecondsPerSecond
 
     var symbol: String {
         switch self {
@@ -47,6 +47,7 @@ enum ExplorerUnit {
         case .seconds: return "s"
         case .joules: return "J"
         case .thermalState: return "state"
+        case .millisecondsPerSecond: return "ms/s"
         }
     }
 
@@ -65,6 +66,7 @@ enum ExplorerUnit {
         case .milliseconds: return String(format: "%.2f ms", value)
         case .seconds: return String(format: "%.2f s", value)
         case .joules: return String(format: "%.2f J", value)
+        case .millisecondsPerSecond: return MetricUnit.millisecondsPerSecond.format(value)
         case .thermalState:
             return ThermalPressureState(rawValue: Int(value.rounded()))?.label ?? t("Unavailable")
         }
@@ -251,8 +253,25 @@ enum ExplorerMetrics {
                 unit: .watts,
                 source: .system([
                     .init(name: t("GPU"), color: .teal, value: { $0.gpuPowerWatts }),
-                    .init(name: t("Neural Engine"), color: .pink, value: { $0.anePowerWatts }),
+                    .init(
+                        name: t("ANE power"), color: .pink, value: { $0.anePowerWatts },
+                        minimum: { $0.minima?.anePowerWatts }, maximum: { $0.peaks?.anePowerWatts },
+                        weight: { $0.anePowerSampleCount.map(Double.init) }),
                 ])),
+            .init(
+                id: "aneTime", title: t("Neural Engine activity"), group: .graphics,
+                unit: .millisecondsPerSecond,
+                source: .system([
+                    .init(
+                        name: t("ANE time"), color: .purple,
+                        value: { $0.aneTimeMillisecondsPerSecond },
+                        minimum: { $0.minima?.aneTimeMillisecondsPerSecond },
+                        maximum: { $0.peaks?.aneTimeMillisecondsPerSecond },
+                        weight: { $0.aneSampleCount.map(Double.init) })
+                ]),
+                note: t(
+                    "Accounted ANE time per second, not percent of compute capacity. Partial readings are lower bounds. Missing readings are gaps."
+                )),
             .init(
                 id: "die", title: t("Die temperatures"), group: .thermals, unit: .celsius,
                 source: .system([

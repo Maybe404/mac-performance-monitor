@@ -16,7 +16,7 @@ struct BatteryView: View {
 
     @StateObject private var accessories = AccessoryBatteryModel.shared
     @StateObject private var energyHistory = EnergyHistoryModel()
-    @State private var range: HistoryWindow = .oneHour
+    @StoredHistoryWindow("historyRange.energy") private var range
     @State private var history: [SystemHistoryPoint] = []
     /// The downsampled timeline + live point, computed once whenever the source
     /// data changes (not on every layout pass). Recomputing this inside a chart's

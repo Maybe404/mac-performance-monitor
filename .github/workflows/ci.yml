@@ -18,22 +18,38 @@ concurrency:
 
 jobs:
   build-test-lint:
-    name: Build, test, lint
-    runs-on: macos-15
+    name: Build, test, lint (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, xcode-27]
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
 
       - name: Show toolchain
-        run: swift --version
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Verify AI build toolchain
+        if: matrix.runner == 'xcode-27'
+        run: xcodebuild -version | grep -E '^Xcode 27([.]|$)'
+
+      - name: Install Metal toolchain for local inference
+        run: |
+          if ! xcrun metal --version > /dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
 
       - name: Cache SwiftPM build
         uses: actions/cache@v4
         with:
           path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          key: spm-${{ matrix.runner }}-${{ runner.arch }}-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
-            spm-${{ runner.os }}-
+            spm-${{ matrix.runner }}-${{ runner.arch }}-
 
       - name: Build
         run: swift build

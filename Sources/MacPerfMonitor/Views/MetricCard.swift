@@ -11,6 +11,7 @@ enum MetricUnit {
     case rpm
     case minutes
     case count
+    case millisecondsPerSecond
 
     func format(_ value: Double) -> String {
         switch self {
@@ -28,6 +29,9 @@ enum MetricUnit {
         case .count:
             guard value.isFinite, value >= 0 else { return t("Not reported") }
             return value.formatted(.number.precision(.fractionLength(0)))
+        case .millisecondsPerSecond:
+            guard value.isFinite, value >= 0 else { return t("Unavailable") }
+            return t("%@ ms/s", value.formatted(.number.precision(.fractionLength(0...1))))
         }
     }
 }
@@ -682,7 +686,7 @@ struct MetricDetailChart: View {
     private var reduction: TrendSurfaceSeries.Reduction {
         switch unit {
         case .celsius, .rpm: return .maximum
-        case .percent, .bytes, .watts, .minutes, .count: return .mean
+        case .percent, .bytes, .watts, .minutes, .count, .millisecondsPerSecond: return .mean
         }
     }
 
@@ -733,7 +737,7 @@ struct MetricDetailChart: View {
         switch unit {
         case .percent: return 0...100
         case .bytes: return 0...LiveChartGeometry.niceCeiling(max(peak * 1.12, 1))
-        case .watts, .rpm, .minutes, .count:
+        case .watts, .rpm, .minutes, .count, .millisecondsPerSecond:
             return 0...LiveChartGeometry.niceCeiling(max(peak * 1.2, 1))
         case .celsius:
             let low = values.min() ?? peak

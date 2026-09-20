@@ -19,6 +19,8 @@ struct ExplorerReading {
 
 @MainActor
 final class DataExplorerModel: ObservableObject {
+    static let spanDefaultsKey = "historyRange.explorerSeconds"
+
     @Published private(set) var domain: ClosedRange<Date>
     @Published private(set) var followsLive = true
     @Published private(set) var loading = false
@@ -62,9 +64,15 @@ final class DataExplorerModel: ObservableObject {
     private var preparationGeneration = 0
     private var needsChartReplacement = false
     private var tailInFlight = false
+    private let preferences: UserDefaults?
 
-    init(now: Date = Date()) {
-        domain = now.addingTimeInterval(-3600)...now
+    init(now: Date = Date(), preferences: UserDefaults? = nil) {
+        self.preferences = preferences
+        let saved = preferences?.double(forKey: Self.spanDefaultsKey) ?? 0
+        let duration =
+            saved.isFinite && (20...90 * 86_400).contains(saved)
+            ? saved : HistoryWindow.thirtyMinutes.seconds
+        domain = now.addingTimeInterval(-duration)...now
     }
 
     var span: TimeInterval { domain.upperBound.timeIntervalSince(domain.lowerBound) }
@@ -167,6 +175,7 @@ final class DataExplorerModel: ObservableObject {
         alertEvidence = []
         let end = followsLive ? Date() : domain.upperBound
         domain = end.addingTimeInterval(-window.seconds)...end
+        preferences?.set(window.seconds, forKey: Self.spanDefaultsKey)
         cursor.clear()
         clearObservation()
         refresh()
@@ -211,6 +220,7 @@ final class DataExplorerModel: ObservableObject {
         let duration = min(90 * 86_400, max(20, resolution, span * factor))
         let end = min(Date(), anchor.addingTimeInterval(duration * (1 - fraction)))
         domain = end.addingTimeInterval(-duration)...end
+        preferences?.set(duration, forKey: Self.spanDefaultsKey)
         if anchorFraction != nil {
             generation += 1
             preparationGeneration += 1

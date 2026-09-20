@@ -23,12 +23,12 @@ struct DashboardView: View {
     @Environment(\.samplerModel) private var model
     @EnvironmentObject private var appState: AppState
 
-    @State private var range: HistoryWindow
+    @StoredHistoryWindow("historyRange.dashboard") private var range
 
     /// `initialRange` lets the chart harness start on a short window, where the
     /// strip charts re-home often enough to be exercised in a minute.
-    init(initialRange: HistoryWindow = .oneHour) {
-        _range = State(initialValue: initialRange)
+    init(initialRange: HistoryWindow? = nil) {
+        _range = StoredHistoryWindow("historyRange.dashboard", initialValue: initialRange)
     }
     @State private var timeline = DashboardTimelineStore()
     @State private var loadedRange: HistoryWindow?
