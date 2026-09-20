@@ -7,6 +7,27 @@ import XCTest
 
 @MainActor
 final class MainWindowNavigationTests: XCTestCase {
+    func testNavigationSupportsNativeTabViews() throws {
+        _ = NSApplication.shared
+        let tabs = NSTabView(frame: CGRect(x: 0, y: 0, width: 980, height: 720))
+        for index in 0..<10 {
+            let item = NSTabViewItem(identifier: index)
+            item.label = "Tab \(index)"
+            item.view = NSView()
+            tabs.addTabViewItem(item)
+        }
+        let window = NSWindow(
+            contentRect: tabs.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = tabs
+        window.toolbar = NSToolbar(identifier: "navigation-test")
+        defer { window.close() }
+        tabs.selectTabViewItem(at: 3)
+        let result = try navigation(in: window)
+        XCTAssertEqual(result.labels, (0..<10).map { "Tab \($0)" })
+        XCTAssertEqual(result.selected, 3)
+    }
+
     func testFirstOpenNavigationMatchesReturningToDashboard() async throws {
         try await verifyNavigation(width: 980, appearance: .darkAqua)
         try await verifyNavigation(width: 1800, appearance: .aqua)
@@ -65,7 +86,7 @@ final class MainWindowNavigationTests: XCTestCase {
         XCTAssertTrue(window.toolbar === initialToolbar)
         XCTAssertEqual(window.toolbar?.items.count, 2)
         XCTAssertEqual(window.toolbar?.items.map(\.itemIdentifier), toolbarIDs)
-        XCTAssertNil(segmentedControl(in: try XCTUnwrap(window.contentView?.superview)))
+        XCTAssertNil(navigationControl(in: try XCTUnwrap(window.contentView?.superview)))
 
         state.mainWindowOpen = true
         await settle(window)
@@ -77,7 +98,7 @@ final class MainWindowNavigationTests: XCTestCase {
         state.mainWindowVisible = false
         await settle(window)
         XCTAssertTrue(window.toolbar === initialToolbar)
-        XCTAssertNil(segmentedControl(in: try XCTUnwrap(window.contentView?.superview)))
+        XCTAssertNil(navigationControl(in: try XCTUnwrap(window.contentView?.superview)))
 
         state.mainWindowVisible = true
         await settle(window)
@@ -97,11 +118,20 @@ final class MainWindowNavigationTests: XCTestCase {
 
     private func navigation(in window: NSWindow) throws -> Navigation {
         let root = try XCTUnwrap(window.contentView?.superview)
-        let control = try XCTUnwrap(segmentedControl(in: root))
+        let control = try XCTUnwrap(navigationControl(in: root))
         let toolbar = try XCTUnwrap(window.toolbar)
-        let labels = (0..<control.segmentCount).map { control.label(forSegment: $0) ?? "" }
+        let labels: [String]
+        let selected: Int
+        if let segments = control as? NSSegmentedControl {
+            labels = (0..<segments.segmentCount).map { segments.label(forSegment: $0) ?? "" }
+            selected = segments.selectedSegment
+        } else {
+            let tabs = try XCTUnwrap(control as? NSTabView)
+            labels = tabs.tabViewItems.map(\.label)
+            selected = tabs.selectedTabViewItem.map { tabs.indexOfTabViewItem($0) } ?? -1
+        }
         let result = Navigation(
-            labels: labels, selected: control.selectedSegment,
+            labels: labels, selected: selected,
             frame: control.convert(control.bounds, to: root),
             toolbarHeight: window.frame.height - window.contentLayoutRect.height,
             itemCount: toolbar.items.count)
@@ -110,9 +140,10 @@ final class MainWindowNavigationTests: XCTestCase {
         return result
     }
 
-    private func segmentedControl(in view: NSView) -> NSSegmentedControl? {
+    private func navigationControl(in view: NSView) -> NSView? {
         if let control = view as? NSSegmentedControl, control.segmentCount == 10 { return control }
-        return view.subviews.lazy.compactMap { self.segmentedControl(in: $0) }.first
+        if let control = view as? NSTabView, control.numberOfTabViewItems == 10 { return control }
+        return view.subviews.lazy.compactMap { self.navigationControl(in: $0) }.first
     }
 
     private func settle(_ window: NSWindow) async {
