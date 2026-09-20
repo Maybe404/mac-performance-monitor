@@ -2,25 +2,75 @@
 
 ## 2.2.0 Release
 
-The maintainer approved publishing 2.2.0 on 20 September 2026. The candidate is
-build 260, compared with public 2.1.0 build 236. The release is not public until
-the draft artifacts have passed the checks below.
+The maintainer approved publishing 2.2.0 on 20 September 2026.
+[Version 2.2.0, build 260](https://github.com/Zesty0wl/mac-performance-monitor/releases/tag/v2.2.0.260)
+became the latest stable release at **13:37:27 UTC** that day. The previous
+public release was 2.1.0 build 236.
 
 - [x] Approve version 2.2.0 and retain the disclosed Preview and experimental limits.
 - [x] Finalize the dated changelog and release notes, including version-pinned links.
-- [ ] Commit and push the exact release source, excluding private local notes and data.
-- [ ] Pass hosted CI on macOS 15 and the Xcode 27 runner.
-- [ ] Sign and notarize the app and installer with the existing Apple identities.
-- [ ] Verify nested signatures, staples, package contents, languages, and installed launch.
-- [ ] Embed the release notes in Sparkle and verify the archive with the public key from 2.1.0.
-- [ ] Pin the release tag to the verified source commit and check downloaded draft assets.
-- [ ] Publish the same bytes and verify public installer, archive, and update-feed URLs.
-- [ ] Update and test the Homebrew cask against the final package checksum.
+- [x] Commit and push the exact release source, excluding private local notes and data.
+- [x] Pass hosted CI on macOS 15 and the Xcode 27 runner.
+- [x] Sign and notarize the app and installer with the existing Apple identities.
+- [x] Verify nested signatures, staples, package contents, languages, and installed launch.
+- [x] Embed the release notes in Sparkle and verify the archive with the public key from 2.1.0.
+- [x] Pin the release tag to the verified source commit and check downloaded draft assets.
+- [x] Publish the same bytes and verify public installer, archive, and update-feed URLs.
+- [x] Update and test this repository's Homebrew cask against the final package checksum.
 
-The broader model, Siri, translation, and workload checks listed in preparation
-remain disclosed limitations. A passing unit suite or runtime smoke check does
-not establish diagnostic accuracy. No cloud fallback or model download is enabled
-as part of publishing.
+### Verification Record
+
+- The annotated tag `v2.2.0.260` pins source commit
+  `536952c51e2b35fbe6743b35d023b216edc0f9f7`.
+  [Hosted CI](https://github.com/Zesty0wl/mac-performance-monitor/actions/runs/35513524793)
+  passed on both runners: **1,022 tests**, 15 expected opt-in skips, no failures.
+  The Xcode 27 run includes 175 app, 17 IPC, and 830 Core tests.
+- The first CI run found a navigation-test assumption about AppKit on macOS 15.
+  The final commit fixes that test and adds a native-tab fixture. App sources,
+  resources, dependencies, scripts, and release notes match the signed build's inputs.
+- Apple accepted app notarization `e50c49e0-251e-43d3-bdbd-a18375f06674` and
+  installer notarization `7a282948-080d-4b60-86d6-d296c7fc0e52`.
+  Both use the existing Developer ID identities for team `8352865GK4`.
+  Nested signatures, notarization tickets, and Gatekeeper checks pass.
+- ZIP and PKG extraction produces the same files, symlinks, and permissions as
+  the signed app. All **2,829 catalog keys** match in English, German, French,
+  and Simplified Chinese. Package-builder warnings did not change the payload.
+- After backing up the app and history, the exact ZIP bundle replaced local
+  2.1.0 build 259. Version 2.2.0 build 260 launches, the helper runs, and GPU
+  charts draw live readings and retained history. The backup passes SQLite's
+  integrity check. Both inference runtime checks pass without network or build-folder access.
+- The draft and public downloads match the checked local files byte for byte.
+  The latest installer and feed, plus the versioned ZIP, return HTTP 200
+  without a GitHub sign-in. Sparkle's archive signature verifies with the public key from 2.1.0.
+  The feed specifies build 260, version 2.2.0, macOS 15, and arm64. Its embedded
+  notes and archive length of 33,457,449 bytes match the release.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `MacPerformanceMonitor.pkg` | `3a01042bf095f8ea3fce4c9ca6e6ed2a3feaafaf83becda86a50d93843fbac2c` |
+| `MacPerformanceMonitor-2.2.0.260.zip` | `a56e58be76e8530c24a742fd7b2531873fd8462c98d963734ecee1c0836895cc` |
+| `appcast.xml` | `4c3de4970ebd0204a2f5ad4ae155c362b22cf63d392f69842c2197257b1cc339` |
+
+### Homebrew Status
+
+This repository's cask now targets 2.2.0.260. Ruby syntax, Homebrew style, and
+the online cask audit pass. `brew fetch` verifies the package checksum; its
+cached download matches the published installer exactly.
+
+At publication, Homebrew's official catalog still listed 2.1.0.236.
+`brew livecheck --cask --autobump mac-performance-monitor` detects 2.2.0.260.
+Homebrew rejects manual version-bump PRs for this cask because its bot handles
+them automatically. The bot's next update and catalog refresh remain pending.
+See [Homebrew distribution](homebrew-submission.md) for the official and tap paths.
+
+The model, Siri, language, and workload checks listed below remain open.
+Passing tests does not prove that an AI answer is sound. The app has no cloud
+fallback. Publishing does not download model weights. This pass did not run
+a full Sparkle UI upgrade or a root-level package install through Homebrew.
+It did not change the website.
+
+Private backups, screenshots, and logs remain under ignored
+`build/release-verification/2.2.0.260`. They are not release assets.
 
 ## Sunday Release Preparation (20 September 2026)
 

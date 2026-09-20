@@ -1,25 +1,29 @@
 # Homebrew Distribution
 
-Users can install the latest published app without adding a tap:
+Users can install the app from Homebrew's official catalog without adding a tap:
 
 ```sh
 brew install --cask mac-performance-monitor
 ```
+
+The catalog can lag a new release while Homebrew's bot updates the cask.
+Sparkle and the direct installer can offer the new version sooner.
 
 The cask in this repository is
 [Casks/mac-performance-monitor.rb](../Casks/mac-performance-monitor.rb).
 Homebrew keeps its own copy. Check both when the version, install steps, or
 supported Mac models change.
 
-## Preparing 2.0
+## Prepare A Release
 
-Keep the cask on the latest published package while 2.0 is in development.
+Keep the cask on the latest published package while the next version is in development.
 Do not point its version or URL at a test build with no public download.
 The final build number and hash must come from the published signed package.
 
-Use the hash after signing, notarization, and stapling. Do not copy it from a
-`--skip-upload` package: the later resume pass rebuilds those bytes. Follow the
-[release checklist](release-checklist.md) for the source and tag checks.
+Use the hash after signing, notarization, and stapling. Publish those exact bytes.
+A `--skip-upload` package is suitable if you upload it without rebuilding it.
+Running `deploy.sh --resume` again recreates the package and can change its hash.
+Follow the [release checklist](release-checklist.md) for the source and tag checks.
 
 ## What The Cask Does
 
@@ -45,7 +49,7 @@ The release includes the app, its helper, and Sparkle for updates.
 
 - The cask has no `livecheck` block. Homebrew's GitHub release strategy follows
   published releases. The four-part version is the app version plus its build
-  number, for example `1.7.1.206`.
+  number, for example `2.2.0.260`.
 
 ## Check An Update
 
@@ -61,8 +65,10 @@ app. Use a fresh tap name if `local/test` already exists.
 
 ```sh
 brew tap-new local/test --no-git
+mkdir -p "$(brew --repository)/Library/Taps/local/homebrew-test/Casks"
 cp Casks/mac-performance-monitor.rb "$(brew --repository)/Library/Taps/local/homebrew-test/Casks/"
 brew audit --cask --online local/test/mac-performance-monitor
+brew fetch --cask local/test/mac-performance-monitor
 ```
 
 Test the package on a test Mac or with backed-up app data. These commands
@@ -76,16 +82,25 @@ brew untap local/test
 
 ## After Each Release
 
-The publisher updates this repository's cask with the final version and hash.
-That edit reaches tap users only after it is committed and pushed to the branch
-the tap reads. Check the public download before pushing the change.
+Update this repository's cask with the final version and hash. Check the public
+download, then commit and push to the branch the tap reads.
 
-Homebrew's bot can open a version-bump PR when a release appears. Verify that
-update instead of assuming it has merged. To request a bump by hand, use the
-published four-part version in place of `X.Y.Z.B`:
+Homebrew's bot handles version bumps for the official cask. Its CLI rejects
+manual bump PRs for this cask. Check that release detection finds the new version:
 
 ```sh
-brew bump-cask-pr mac-performance-monitor --version X.Y.Z.B
+brew livecheck --cask --autobump mac-performance-monitor
+```
+
+Wait for the bot's PR to merge and the catalog to refresh. Release detection
+alone does not mean the official install command will fetch the new version.
+Check `brew info --cask mac-performance-monitor` before claiming it is available.
+
+To upgrade an existing install after the catalog refreshes:
+
+```sh
+brew update
+brew upgrade --cask --greedy mac-performance-monitor
 ```
 
 Changes to install rules, minimum macOS, or uninstall paths also need a PR in
@@ -101,7 +116,7 @@ brew install --cask zesty0wl/mac-performance-monitor/mac-performance-monitor
 ```
 
 Existing tap installs can still receive Sparkle updates. Users do not need to
-reinstall just to change where Homebrew finds the cask.
+reinstall to change where Homebrew finds the cask.
 
 ## Original Submission
 
