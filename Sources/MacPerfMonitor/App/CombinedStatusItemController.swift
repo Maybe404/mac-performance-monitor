@@ -5,6 +5,8 @@ import SwiftUI
 
 @MainActor
 final class CombinedStatusItemController: NSObject {
+    var onPopoverOpened: (() -> Void)?
+
     private static let panelDefaultsKey = "combinedMenuBarPanel"
     private static let alarmImage: NSImage = {
         let size = NSSize(width: 12, height: 12)
@@ -218,6 +220,7 @@ final class CombinedStatusItemController: NSObject {
         let popover = popover ?? makePopover()
         self.popover = popover
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        if popover.isShown { onPopoverOpened?() }
         popover.contentViewController?.view.window?.makeKey()
     }
 

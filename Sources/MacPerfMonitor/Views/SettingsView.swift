@@ -51,6 +51,9 @@ private struct GeneralSettingsView: View {
                 if let error = loginItem.lastError {
                     caption("Last error: \(error)")
                 }
+                Toggle("Start minimised", isOn: $loginItem.startMinimised)
+                    .disabled(!components.menuBarItem)
+                    .help("Keep the main window closed at startup when the menu bar is enabled.")
             } header: {
                 Text("Startup")
             }

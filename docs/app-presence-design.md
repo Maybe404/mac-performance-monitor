@@ -4,6 +4,34 @@ Design note for issue #21. Status: built for 2.0.0 on the `2.0.0` branch. See
 "What was actually built" at the end for the two places the work departed from
 the plan.
 
+## Startup update, September 2026
+
+**Start minimised** is on by default in Settings > General > Startup. After
+setup, cold launches keep the main window closed when the menu bar is on.
+This includes opening at login. Turning the setting off shows the window at
+startup. With the menu bar off, startup always shows the window.
+
+First-run setup still appears. Reopening the running app from Finder, Spotlight
+or the Dock still opens its window, as do menu actions. The main window does
+not restore itself at launch. A pinned Dock icon does not take focus while
+no window is open. The old launch rule below no longer applies.
+
+The app can ask for a GitHub star once seven full days have passed since its
+first launch with this version. You must have opened a menu bar panel and used
+the main window. The app stores a first-use date and three flags on your Mac.
+It does not send usage data to GitHub or any other site. Earlier use does not
+count.
+
+The request waits until the main window is in front, setup is complete, and no
+other prompt or sheet is open. It never opens a window or takes focus. The app
+saves the shown flag just before it shows the sheet. Either response stops all
+future requests, even after a relaunch. Only **Star on GitHub** opens the
+project page in a browser. The request does not need a timer.
+
+Tests cover the startup switch, seven-day wait, use of both views, and saved
+state. The tests set the key-window flag for native sheet checks. A real cold
+boot and a check of the installed app's focus remain manual release checks.
+
 ## What this is about
 
 Issue #21 asks for a way to remove the menu bar item while the app keeps

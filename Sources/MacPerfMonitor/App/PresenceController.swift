@@ -79,7 +79,8 @@ final class PresenceController {
     }
 
     private func apply() {
-        let wantsRegular = isPinned || NSApp.windows.contains { $0.isRealAppWindow }
+        let hasVisibleWindow = NSApp.windows.contains { $0.isRealAppWindow }
+        let wantsRegular = isPinned || hasVisibleWindow
         let desired: NSApplication.ActivationPolicy = wantsRegular ? .regular : .accessory
         guard NSApp.activationPolicy() != desired else { return }
         NSApp.setActivationPolicy(desired)
@@ -89,7 +90,7 @@ final class PresenceController {
         // menu bar unclaimed until something activates it. Every window in this
         // app opens because the user asked for one, so taking focus here is what
         // they expect, and it is much better than a window with no menus.
-        if desired == .regular, !NSApp.isActive {
+        if hasVisibleWindow, desired == .regular, !NSApp.isActive {
             NSApp.activate(ignoringOtherApps: true)
         }
     }

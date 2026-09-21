@@ -145,6 +145,7 @@ struct MacPerfMonitorApp: App {
         .defaultSize(width: 980, height: 640)
         .windowToolbarStyle(.unifiedCompact)
         .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commands {
             CommandMenu("Ask") {
                 Button("Ask About This Mac (Preview)") {
@@ -448,6 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
     let onboarding = OnboardingState()
     let helperManager = HelperManager()
     let loginItemManager = LoginItemManager()
+    private let gitHubStarPrompt = GitHubStarPrompt()
     let fullDiskAccessManager = FullDiskAccessManager()
     let updateController = UpdateController()
     let monitorSelection = MonitorSelection()
@@ -498,6 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppLog.ui.notice("app launched (menubar)")
+        gitHubStarPrompt.recordLaunch()
         let intentRuntime = monitorIntentRuntime
         AppDependencyManager.shared.add(dependency: intentRuntime)
         MonitorPreviewShortcuts.updateAppShortcutParameters()
@@ -534,6 +537,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
             components: components, languageManager: languageManager,
             configuration: menuBarConfiguration,
             notchDisplay: notchDisplayController)
+        combinedStatusItem.onPopoverOpened = { [gitHubStarPrompt] in
+            gitHubStarPrompt.recordUse(.menuBar)
+        }
         combinedStatusItem.start()
         self.combinedStatusItem = combinedStatusItem
 
@@ -674,10 +680,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         if !onboarding.hasCompletedSetup {
             onboarding.autoConfigOnly = onboarding.hasCompleted
             WindowOpenBridge.shared.open(id: WindowID.onboarding)
-        } else if isUserLaunch(notification) {
-            // The window is the app now, so a launch shows it. A launch the
-            // person did not ask for does not: opening at login must stay quiet,
-            // or the app puts a window in their face every morning.
+        } else if loginItemManager.shouldPresentMainWindow(menuBarEnabled: components.menuBarItem) {
             presentMainWindowAtLaunch()
         }
 
@@ -700,14 +703,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         MainActor.assumeIsolated {
             WindowOpenBridge.shared.open(id: WindowID.main)
         }
-    }
-
-    /// Whether this launch was the user asking for the app, as opposed to the
-    /// system starting it as a login item, to open a file, or to perform a
-    /// service. AppKit reports it in the launch notification; treat an absent
-    /// key as a user launch, which is what a plain double-click looks like.
-    private func isUserLaunch(_ notification: Notification) -> Bool {
-        notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? true
     }
 
     /// Ask for the main window shortly after launch, and keep asking until one
@@ -831,6 +826,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
             // immediately rather than showing data as stale as the idle stretch.
             model.requestImmediateTick()
         }
+        considerGitHubStarPrompt()
+    }
+
+    private func considerGitHubStarPrompt() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.onboarding.hasCompletedSetup,
+                NSApp.isActive, let window = NSApp.keyWindow,
+                window.title == AppInfo.displayName
+            else { return }
+            self.gitHubStarPrompt.recordUse(.mainWindow)
+            self.gitHubStarPrompt.presentIfEligible(
+                in: window, isAppActive: NSApp.isActive,
+                otherPromptPending: self.appState.helperPromptPending
+                    || self.appState.loginItemPromptPending
+                    || self.appState.pendingForceQuit != nil
+                    || self.appState.codesignTarget != nil)
+        }
     }
 
     @objc private func mainWindowOcclusionChanged(_ note: Notification) {
@@ -936,6 +948,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate,
         // Full Disk Access is also granted out of process; re-probe so the
         // Disk Map's card and Settings reflect a fresh grant.
         fullDiskAccessManager.refresh()
+        considerGitHubStarPrompt()
     }
 
     // MARK: - UNUserNotificationCenterDelegate

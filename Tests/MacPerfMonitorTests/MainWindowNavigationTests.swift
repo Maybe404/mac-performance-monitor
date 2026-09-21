@@ -7,6 +7,190 @@ import XCTest
 
 @MainActor
 final class MainWindowNavigationTests: XCTestCase {
+    func testStartupDefaultsToMinimisedOnlyWithMenuBar() throws {
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let loginItem = LoginItemManager(defaults: defaults)
+
+        XCTAssertTrue(loginItem.startMinimised)
+        XCTAssertFalse(loginItem.shouldPresentMainWindow(menuBarEnabled: true))
+        XCTAssertTrue(loginItem.shouldPresentMainWindow(menuBarEnabled: false))
+    }
+
+    func testStartMinimisedPreferencePersistsAndCanBeDisabled() throws {
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let loginItem = LoginItemManager(defaults: defaults)
+        loginItem.startMinimised = false
+
+        let relaunched = LoginItemManager(defaults: defaults)
+        XCTAssertFalse(relaunched.startMinimised)
+        XCTAssertTrue(relaunched.shouldPresentMainWindow(menuBarEnabled: true))
+        XCTAssertTrue(relaunched.shouldPresentMainWindow(menuBarEnabled: false))
+
+        relaunched.startMinimised = true
+        XCTAssertFalse(
+            LoginItemManager(defaults: defaults).shouldPresentMainWindow(menuBarEnabled: true))
+    }
+
+    func testGitHubStarNeedsAWeekAndBothSurfaces() throws {
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prompt = GitHubStarPrompt(defaults: defaults)
+        let firstUse = Date(timeIntervalSince1970: 1_800_000_000)
+        let oneWeekLater = firstUse.addingTimeInterval(7 * 24 * 60 * 60)
+
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: oneWeekLater))
+        prompt.recordLaunch(at: firstUse)
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: oneWeekLater))
+        prompt.recordUse(.menuBar, at: firstUse)
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: oneWeekLater))
+        prompt.recordUse(.mainWindow, at: firstUse.addingTimeInterval(60))
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: firstUse.addingTimeInterval(-1)))
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: oneWeekLater.addingTimeInterval(-1)))
+        XCTAssertTrue(prompt.shouldOfferPrompt(at: oneWeekLater))
+        XCTAssertTrue(prompt.shouldOfferPrompt(at: oneWeekLater.addingTimeInterval(1)))
+    }
+
+    func testGitHubStarMainWindowAloneDoesNotQualify() throws {
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prompt = GitHubStarPrompt(defaults: defaults)
+        let firstUse = Date(timeIntervalSince1970: 1_800_000_000)
+        prompt.recordUse(.mainWindow, at: firstUse)
+
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: firstUse.addingTimeInterval(30 * 24 * 60 * 60)))
+    }
+
+    func testGitHubStarUsagePersistsWithoutResettingFirstUse() throws {
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstUse = Date(timeIntervalSince1970: 1_800_000_000)
+        let oneWeekLater = firstUse.addingTimeInterval(7 * 24 * 60 * 60)
+        let prompt = GitHubStarPrompt(defaults: defaults)
+        prompt.recordLaunch(at: firstUse)
+        prompt.recordUse(.menuBar, at: firstUse)
+
+        let relaunched = GitHubStarPrompt(defaults: defaults)
+        relaunched.recordLaunch(at: oneWeekLater)
+        relaunched.recordUse(.mainWindow, at: oneWeekLater)
+        XCTAssertTrue(relaunched.shouldOfferPrompt(at: oneWeekLater))
+    }
+
+    func testGitHubStarDoesNotPromptAgainAfterPresentation() throws {
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstUse = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = firstUse.addingTimeInterval(30 * 24 * 60 * 60)
+        let prompt = GitHubStarPrompt(defaults: defaults)
+        prompt.recordUse(.mainWindow, at: firstUse)
+        prompt.recordUse(.menuBar, at: firstUse)
+        XCTAssertTrue(prompt.shouldOfferPrompt(at: later))
+        prompt.markPromptShown()
+        XCTAssertFalse(prompt.shouldOfferPrompt(at: later))
+
+        let relaunched = GitHubStarPrompt(defaults: defaults)
+        relaunched.recordLaunch(at: later)
+        relaunched.recordUse(.menuBar, at: later)
+        relaunched.recordUse(.mainWindow, at: later)
+        XCTAssertFalse(relaunched.shouldOfferPrompt(at: later))
+    }
+
+    func testGitHubStarWaitsForForegroundAndOtherPrompts() async throws {
+        _ = NSApplication.shared
+        let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prompt = GitHubStarPrompt(defaults: defaults)
+        let firstUse = Date(timeIntervalSince1970: 1_800_000_000)
+        let later = firstUse.addingTimeInterval(7 * 24 * 60 * 60)
+        prompt.recordUse(.menuBar, at: firstUse)
+        prompt.recordUse(.mainWindow, at: firstUse)
+        let window = StarPromptTestWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 480, height: 320),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.orderFront(nil)
+        defer { window.close() }
+        await settle(window)
+        XCTAssertTrue(window.isVisible)
+
+        XCTAssertFalse(
+            prompt.presentIfEligible(
+                in: window, isAppActive: false, otherPromptPending: false, at: later))
+        window.reportsKeyWindow = false
+        XCTAssertFalse(
+            prompt.presentIfEligible(
+                in: window, isAppActive: true, otherPromptPending: false, at: later))
+        window.reportsKeyWindow = true
+        XCTAssertFalse(
+            prompt.presentIfEligible(
+                in: window, isAppActive: true, otherPromptPending: true, at: later))
+        let otherSheet = NSWindow(
+            contentRect: window.contentLayoutRect, styleMask: [.titled],
+            backing: .buffered, defer: false)
+        otherSheet.isReleasedWhenClosed = false
+        window.beginSheet(otherSheet, completionHandler: nil)
+        XCTAssertFalse(
+            prompt.presentIfEligible(
+                in: window, isAppActive: true, otherPromptPending: false, at: later))
+        window.endSheet(otherSheet)
+        otherSheet.close()
+        window.orderOut(nil)
+        XCTAssertFalse(
+            prompt.presentIfEligible(
+                in: window, isAppActive: true, otherPromptPending: false, at: later))
+        XCTAssertTrue(prompt.shouldOfferPrompt(at: later))
+    }
+
+    func testGitHubStarSheetResponsesAreOnceOnly() async throws {
+        _ = NSApplication.shared
+        for response: NSApplication.ModalResponse in [
+            .alertFirstButtonReturn, .alertSecondButtonReturn,
+        ] {
+            let suite = "MainWindowNavigationTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let prompt = GitHubStarPrompt(defaults: defaults)
+            let firstUse = Date(timeIntervalSince1970: 1_800_000_000)
+            let later = firstUse.addingTimeInterval(7 * 24 * 60 * 60)
+            prompt.recordUse(.menuBar, at: firstUse)
+            prompt.recordUse(.mainWindow, at: firstUse)
+            let window = StarPromptTestWindow(
+                contentRect: CGRect(x: 0, y: 0, width: 480, height: 320),
+                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.orderFront(nil)
+            defer {
+                if let sheet = window.attachedSheet { window.endSheet(sheet) }
+                window.close()
+            }
+            await settle(window)
+            var openedURLs: [URL] = []
+            XCTAssertTrue(
+                prompt.presentIfEligible(
+                    in: window, isAppActive: true, otherPromptPending: false, at: later,
+                    openRepository: { openedURLs.append($0) }))
+            let sheet = try XCTUnwrap(window.attachedSheet)
+            XCTAssertFalse(GitHubStarPrompt(defaults: defaults).shouldOfferPrompt(at: later))
+            window.endSheet(sheet, returnCode: response)
+            await settle(window)
+
+            XCTAssertEqual(
+                openedURLs,
+                response == .alertFirstButtonReturn ? [GitHubStarPrompt.repositoryURL] : [])
+            XCTAssertFalse(
+                prompt.presentIfEligible(
+                    in: window, isAppActive: true, otherPromptPending: false, at: later))
+        }
+    }
+
     func testNavigationSupportsNativeTabViews() throws {
         _ = NSApplication.shared
         let tabs = NSTabView(frame: CGRect(x: 0, y: 0, width: 980, height: 720))
@@ -106,6 +290,11 @@ final class MainWindowNavigationTests: XCTestCase {
         XCTAssertEqual(first.frame, visible.frame)
         XCTAssertEqual(first.labels, visible.labels)
         XCTAssertEqual(window.toolbar?.items.map(\.itemIdentifier), toolbarIDs)
+    }
+
+    private final class StarPromptTestWindow: NSWindow {
+        var reportsKeyWindow = true
+        override var isKeyWindow: Bool { reportsKeyWindow }
     }
 
     private struct Navigation {

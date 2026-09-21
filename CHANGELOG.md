@@ -6,6 +6,24 @@ Notable changes to Mac Performance Monitor. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- **Start minimised** in Settings > General > Startup, on by default. With the
+  menu bar on, the app starts without opening its main window, including
+  at login. Turn it off to show the window at startup. The window always opens
+  at startup if the menu bar is off. First-run setup still appears.
+- A one-time request to star the app on GitHub. It waits at least seven days
+  from the first launch this version records. You must also have used a menu
+  bar panel and the main window. The request waits until the main window is in
+  front with no other prompt. Either response stops future requests. These
+  usage flags stay on your Mac.
+
+### Fixed
+
+- The main window no longer restores itself at startup. The saved startup
+  setting controls whether it opens. The app no longer relies on macOS launch
+  data. A pinned Dock icon no longer takes focus when no window is open.
+
 ## [2.2.0] - 2026-09-20
 
 ### Added
